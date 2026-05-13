@@ -2,11 +2,11 @@
 
 ## Requirements
 
-1. The system shall provide energy to load LEDs to satisfy the demands given by a third-party web server.
-2. The system shall extract energy from a bench power supply (PSU) set up to emulate the voltage-current characteristic of a PV array.
-    1. The configuration of the PSU shall be determined by characterising a supplied PV array
-    2. The current and/or voltage of the PSU shall be manually modulated to emulate the effect of the day/night cycle
-    3. The system shall use a switch-mode power supply (SMPS) with variable duty cycle to maximise the energy extracted from the emulated PV array
+1. The system shall provide energy to domestic emulator LEDs to satisfy the demands given by a third-party web server.
+2. The system shall extract energy from a pair of PV panels illuminated by solar emulator lamps.
+    1. The light output will be modulated to represent the day/night cycle
+    2. Each group has a single PV setup for development rather than two. A PSU can be used to emulate the dual PV array for testing.
+    3. The system shall use a switch-mode power supply (SMPS) to maximise the energy extracted from the PV array across various conditions
 3. The system shall store excess energy in a provided supercapacitor for use at a later time
     1. No batteries shall be used
 4. A mismatch between supply and demand of power shall be accommodated by importing from or exporting to an external grid, which is emulated by a PSU with an energy sink.
@@ -19,22 +19,28 @@
 
 ### Hardware Kit
 
+| ![Photo of your starter kit](doc/starter_kit.jpg) |
+|:--:|
+| _Photo of your starter kit_ | 
+
 Your starter kit contains:
 
 | Qty. | Item |
 | ---- | ---- |
-| 3    | Bidirectional Buck/Boost SMPS Module |
-| 3    | Buck SMPS Module - Configured as LED Driver |
-| 3    | Power LED Module |
-| 1    | PV Array with 4 cells and connection block |
+| 4    | Bidirectional Buck/Boost SMPS Module |
+| 1    | Triple LED Assembly - 3 Buck SMPS connected to 3 1A LEDs as loads (due to be ready shortly after project start) |
+| 1    | Single LED Assembly - 1 Buck SMPS connected to 1 0.3A LED as loads (temporary for development while we wait for the new setup) |
+| 1    | PV Panel with solar emulation lamp |
 | 2    | Clamp Multimeter |
-| 2    | Busbar |
-| 1    | Load Resistor Module |
-| 2    | 0.25F Supercapacitor |
+| 1    | DC Grid Busbar |
+| 1    | Supercapacitor module |
+| 1    | Collection of USB leads |
+| 1    | Collection of 4mm Banana Leads |
+
 
 ### Software
 
-Starter code for the Bidirectional SMPS modules is based on the Power Electronics and Power Systems lab. [A skeleton code for the LED driver SMPSs is provided](#appendix---circuit-specifications).
+Starter code for the SMPS modules and domestic load emulators is based on that used in Power Electronics and Power Systems lab. [Code can be found in the specifications section](#appendix---circuit-specifications).
 
 ### The Web Server
 
@@ -43,7 +49,7 @@ An external webserver provides information about demands and externalities that 
 1. The instantaneous demand that you need to satisfy. This represents the sum of all applications that are required immediately by the user, such as boiling a kettle
 2. A list of deferrable demands, which can be satisfied at any time in a specified time period. These represent time-flexible applications such as charging an electric vehicle
 3. The import (sell) and export (buy) cost for energy. The export price is paid to users for energy that they export
-4. The sun irradiance, represented as a fraction of the maximum current setting to be used for the PSU that emulates the PV input
+4. The sun irradiance, represented as a fraction of the maximum current setting to be used for the PSU that emulates the PV input or to control the solar emulator lamp
 5. A history of the irradiance, demand and price from the previous cycle.
 
 The values returned by the webserver change every 5 seconds (tick). They are computed by summing a periodic component, which follows a repeating 5-minute cycle, with a randomised component. Each cycle approximates the characteristics of a day in real life. Data is returned in JSON format and the code used to generate the webserver output is provided for reference.
@@ -68,47 +74,62 @@ Try the following steps to get started with the project:
 This section contains advice on the following sections:
 
 1. [Grid Configuration](#grid-configuration)
-2. [Robot Function](#robot-function)
-3. [PV Array](#pv-array)
-4. [Energy Import and Export](#energy-import-and-export)
-5. [Flywheel](#flywheel)
+2. [Data Connectivity](#data-connectivity)
+3. [Energy Import and Export](#energy-import-and-export)
+4. [PV Array](#pv-array)
+5. [Supercapacitor](#supercapacitor)
+6. [Domestic Load Simulator](#domestic-load-simulator)
+7. [USB Connectivity of Lab Devices](#usb-connectivity-of-lab-devices)
 
 ### Grid Configuration
-
-Your system should use a central DC grid (or bus) with a constant voltage.
-The load LEDs will draw from power from this bus as required, and your energy sources should supply power to maintain the bus voltage at the desired level.
+Your system should use a central DC bus with a constant voltage.
+The domestic load emulator LEDs should draw from power from this bus as required by the server, and your energy/storage sources should supply power to maintain the bus voltage at the desired level.
 The physical bus can be implemented simply by connecting modules to the provided busbar module with 4mm test leads.
 
 SMPS modules are bidirectional, meaning that current and power can flow in either direction through the module.
 However, energy transfer requires a higher voltage at Port A (left side) than Port B (right side).
-The photovoltaic arrays output a variable voltage depending on the irradiance from sunlight and the voltage of the supercapacitor varies with the stored charge.
+The photovoltaic panel outputs a variable voltage depending on the irradiance from sunlight (or brightness of the lamp).
+The voltage of the supercapacitor varies with the stored charge.
 Therefore, choose a bus voltage to ensure that every SMPS module will always satisfy Va > Vb.
 
-Each SMPS module can be used in different modes:
+Each SMPS module can be used in one of many different modes, for example:
 
-1. Attempt to set the voltage on Port A or Port B to a defined level (constant voltage mode)
-2. Attempt to pass a certain amount of current input or output through Port B (constant current mode). This can also be used as a constant power mode by dividing the required power by the voltage on Port B.
-3. Attempt to maximise the power flow through the module with maximum power point tracking (see [below](#pv-array))
+1. Control the voltage on Port A or Port B to a defined level (constant voltage mode)
+2. Pass a certain amount of current input or output through Port B (constant current mode). This can also be used as a constant power mode by dividing the required power by the voltage on Port B.
+3. Maximise the power flow through the module with maximum power point tracking (see [below](#pv-array))
 
-You will need to choose how to configure your modules to meet the project requirements.
+You will need to choose how to configure your SMPSs to meet the project requirements.
 
-#### Data Connectivity
+### Data Connectivity
 
 You will need to communicate with your SMPS modules to control them and monitor the system.
-Each SMPS (bidirectional or buck) uses a Raspberry Pi Pico with WiFi capability, so you can connect them to an external server or database using the provided libraries.
-You may need to use a mobile hotspot to provide a WiFi network because the College WiFi network is difficult to access for embedded devices.
+Each SMPS uses a Raspberry Pi Pico with WiFi capability, so you can connect them to an external server or database using the provided libraries.
+You will need to use a mobile hotspot to provide a WiFi network because the College WiFi network is difficult to access for embedded devices.
+
+### Energy Import and Export 
+
+The system includes a connection to an external power grid that can be used to supply energy if there is insufficient generation or storage to meet the demand.
+It can also be used to sell surplus energy.
+
+The external grid can be emulated with a bench power supply set at a constant voltage that can be converted up or down to your bus voltage with an SMPS.
+If you attempt to drive current into a bench power supply the current will drop to zero and the terminal voltage will rise, so connect a resistor in parallel with the PSU to sink any reverse current. The resistor should be small enough that you can sink the maximum foreseeable export current through it without exceeding 15V. The instructions for the bidirectional PSU in the EE2 Power Lab will help specify this.
+
+The external grid connection is a reliable power source and sink, so it can be interfaced with your bus with a SMPS in a current controlled mode to regulate flow of energy to and from the grid.
+However, this technique could make it harder to precisely control the bus voltage.
+An alternative would be to use constant voltage mode to set DC bus voltage but you then are unable to directly control the import/export. This is one of many engineering decisions that you need to make where each side has pros and cons.
+
+The SMPS module that you use to connect the external grid to your bus should be configured to measure current so that you can calculate the cost of imported energy and the income from exported energy.
 
 ### PV Array
 
-The PV Array has 4 PV cells on an inclined stand.
-The PV cells should be wired in parallel so that the total voltage doesn't exceed the limit of the SMPS modules.
-The voltage of PV cells varies with the level of irradiance and inversely with the current flow.
+The PV setup is an 8W nominal 6V panel with a plastic stand and 4mm banana lead connection. A solar emulator lamp is provided to allow you to test and characterise your PV panel under controlled conditions but you should also characterise it under natural light. The solar emulator is EXTREMELY bright and you should not look directly at it under any circumstances. Legs have been provided to allow you to use the emulator lamp face down with your panel. Beware that this setup will get hot over time so do not use it for extended periods or leave it on when not in use.
+The voltage of PV panel varies with the level of irradiance and current flow.
 Since power is the product of voltage and current, there exists a point where power output is maximum for a given irradiance.
 You need to draw current from the array to extract power, but too much current will reduce the voltage to the point where power reduces.
 
-The first step to optimal use of the PV array is to characterise its I-V (current-voltage) curve. This will need to be completed outside but can be achieved even in overcast conditions.
-Place the PV array in a location with consistent irradiance and connect it to a rheostat.
-Then, sweep the resistance of the rheostat and log the input voltage and current by measuring them multimeters.
+The first step to optimal use of the PV array is to characterise its I-V (current-voltage) curve. This will need to be completed both inside and outside (but can be achieved even in overcast conditions) as each will be slightly different.
+Place the PV array in a location with consistent irradiance and connect it to a load (such as the loadbank indoors or a rheostat outside).
+Then, sweep the current to the load and log the input voltage and current by measuring them multimeters.
 Find the duty cycle which results in maximum power and you have found the most efficient operating point for the PV array. The cell has an open-circuit voltage $V_O$, a short-circuit current $I_S$, and a point ($V_M$, $I_M$) where power is maximal.
 
 | ![IV Characteristic of a PV Cell](doc/PV-real.svg) |
@@ -120,34 +141,7 @@ Instead, you need to implement _maximum power point tracking_ to alter voltage a
 Typically, the controller makes constant adjustments to duty cycle and measures the input power.
 If an adjustment results in increased power, it is kept, otherwise it is reversed.
 
-The PV array does not work well under artificial lighting, so you will need to set up a bench PSU in the lab to mimic the PV array under outdoor conditions.
-The simplest approach is to set the voltage and current limits to the values you observed when the array produced maximal power.
-
-| ![Simple PV Cell emulation with a bench power supply](doc/PV-simple.svg) |
-|:--:|
-| _A bench power supply automatically switches between constant voltage mode and constant current mode such that the voltage limit and the current limit are not exceeded. This results in a rectangular I-V characteristic_ |
-
-You can also add series and parallel resistances to make the I-V function more realistic.
-
-![Simple PV Cell emulation with a bench power supply](doc/PV-improved.svg)
-
-Series and parallel resistances add slopes to the I-V characteristic, which can make more realistic test conditions for an MPPT algorithm.
-Here, $I_M=I_S-(V_O/R_P)$ and $V_M=V_O-I_M R_S$.
-If you implement this PV emulator, make sure you calculate the maximum power dissipation for each resistor and use resistors with an appropriate power rating.
-
-### Energy Import and Export
-
-The system includes a connection to an external power grid that can be used to supply energy if there is insufficient generation or storage.
-It can also be used to sell surplus energy.
-
-The external grid can be emulated with a bench power supply set at a constant voltage that can be converted up or down to your bus voltage with an SMPS.
-If you attempt to drive current into a bench power supply the current will drop to zero and the terminal voltage will rise, so connect a resistor in parallel with the PSU to sink any reverse current. The resistor should be small enough that you can sink the maximum foreseeable export current through it without exceeding 15V.
-
-The external grid connection is a reliable power source and sink, so it can be interfaced with your bus with a SMPS in constant voltage mode to regulate the bus voltage.
-However, this technique could make it harder to precisely control the amount of energy import and export.
-An alternative would be to use constant current mode to set the power import or export according to your forecasting algorithm, but you need to ensure that this does not cause the bus voltage to vary too much.
-
-The SMPS module that you use to connect the external grid to your bus should be configured to measure current so that you can calculate the cost of imported energy and the income from exported energy.
+You only have 1 PV setup per group, so you will need to set up a bench PSU in the lab (and possibly also an SMPS controlled by the server) to mimic the dual PV array that will be used in the demonstration.
 
 ### Supercapacitor
 
@@ -161,21 +155,34 @@ The standard capacitors you've used in labs have close to ideal behaviour at low
 
 Take time to experiment with the capacitor and confirm that you take account of the internal resistance when you integrate it into your system.
 
+### Domestic Load Simulator
+
+Your kit contains a Domestic Load Simulator which is where you must dissipate the load energy as instructed by the web server.
+The energy is to be dissipated in 3 LEDs that are connected a shared DC source. Each LED has an LED driver circuit, all three of these driver circuits are controlled, in turn, by a Raspberry Pi Pico.
+An LED is approximately a fixed voltage device (like any diode) so controlling the power into them requires a current controlled source. The LED drivers you are provided with are a simple Buck SMPS (basically a cut down version of the EE2 lab SMPS) with current measurement on the inductor current, you will be provided with an example code which performs the basic functions but will need to be edited to integrate into your system. As with the solar emulator, these are very bright LEDs so you should be careful to not stare at them directly for extended periods of time.
+
+### USB Connectivity of Lab Devices
+
+Most of the lab equipment (certain PSUs, the load bank and the DMM) from the EE2 power lab have a USB port on the rear and can communicated over this using a relatively simple protocol. Using this feature may help automate some testing and development tasks in your experiment. Further details on how to achieve this with some example code will follow but in the meantime the manuals for these devices are available online ...
+
 ## Appendix - Circuit Specifications
 
 ### Lab SMPS
 
-[Schematic of the Lab SMPS](doc/Lab_SMPS_SCM.pdf)
+| ![Photo of supercapcitor bank](doc/lab_smpss.jpg) |
+|:--:|
+| _Photo of not one but FOUR SMPS boards_ | 
 
-[Example code for Lab SMPS](SMPS_2024_Bidirectional.py)  - Be aware that closed loop mode may not be stable, it was not tuned for your system
+[Schematic of the Lab SMPS](doc/EE2_Power_Lab_SMPS_Schematic_2026.pdf)
+
+[Example code for Lab SMPS](SMPS_2026_Bidirectional.py)  - Be aware that closed loop mode may not be stable, it was not tuned for your system
 
 | Specification | Value | Unit |
 | ------------- | ----- | ---- |
 | Circuit Type | Buck or Boost | |
 | Current Sensing | Bidirectional at Port B positive line | |
-| Controller Type | Raspberry Pi Pico | |
+| Controller Type | Raspberry Pi Pico W | |
 | Controller Power Source | USB, Port A* or Port B* | |
-| Base Code | SMPS_Bidirectional.py | |
 | PWM Frequency | 100 | kHz |
 | Port A Voltage* | 0 - 17.5 | V |
 | Port B Voltage* | 0 - 17.5 | V |
@@ -183,42 +190,11 @@ Take time to experiment with the capacitor and confirm that you take account of 
 
 *The Buck/Boost switch determines which port is used to power all the support circuitry on the board (Pico, Current Sensor, MOSFET drivers etc.), this port has a minimum voltage of 6-7V for this function. If the switch is set to Buck then Port A must meet the minimum voltage, if its set to Boost then Port B must meet the minimum voltage.
 
-### LED Driver SMPS
-
-[Schematic of the LED Driver](doc/LED_Driver_SCM.pdf)
-
-[Example code for LED Driver - This will cycle through different current references for a closed loop current controller](LED_Driver_Example.py)
-
-| Specification | Value | Unit |
-| ------------- | ----- | ---- |
-| Circuit Type | Buck or Boost | |
-| Current Sensing | Unidirectional at output negative line | |
-| Controller Type | Raspberry Pi Pico | |
-| Controller Power Source | USB or Input Port | |
-| Base Code | LED_Driver.py | |
-| PWM Frequency | 100 | kHz |
-| Input Voltage | 7 - 17.5 | V |
-| Output Voltage | 0 - 17.5 | V |
-| Max Current | ~500 | mA |
-
-### LED Loads
-
-| Specification | Value | Unit |
-| ------------- | ----- | ---- |
-| Power Rating | 1 | W |
-| Voltage Drop (varies with colour) | ~3 | V |
-| Current Rating (also varies with colour) | ~300 | mA |
-
-### PV Panels
-
-[Datasheet for PV Panel](https://static.rapidonline.com/pdf/502676_v1.pdf)
-
-| Specification | Value | Unit |
-| ------------- | ----- | ---- |
-| V<sub>OC</sub> | 5 | V |
-| I<sub>SC</sub> | 230 | mA |
-
 ### Supercapacitor
+
+| ![Photo of supercapcitor bank](doc/capn.jpg) |
+|:--:|
+| _Photo of your Supercapacitor bank_ | 
 
 [Datasheet for Supercapacitor](https://www.mouser.co.uk/ProductDetail/Cornell-Dubilier-CDE/DSM254Q018W075PB?qs=rQFj71Wb1eXTUSitfenP%2Fw%3D%3D)
 
@@ -228,3 +204,73 @@ Take time to experiment with the capacitor and confirm that you take account of 
 | Capacitance | 0.25 | F |
 | ESR | ~4 | Ohms |
 | Current Limit (5s Peak) | 350 | mA | 
+
+### PV Panels
+
+| ![Photo of your PV panel](doc/pv_panel.jpg) |
+|:--:|
+| _Photo of 8W PV Panel_ | 
+
+| ![Photo of your solar emulator](doc/notagrowlight.jpg) |
+|:--:|
+| _Photo of the Solar Emulator Light_ | 
+
+| Specification | Value | Unit |
+| ------------- | ----- | ---- |
+| Rated Power | ~8 | W |
+| V<sub>OC</sub> | ~8.5 | V |
+| I<sub>SC</sub> | ~1000 | mA |
+
+### New LED Driver SMPS
+
+[Schematic of the LED Driver](doc/LED_Driver_2026.pdf)
+
+| Specification | Value | Unit |
+| ------------- | ----- | ---- |
+| Circuit Type | Buck | |
+| Current Sensing | Unidirectional at output negative line | |
+| Controller Type | Raspberry Pi Pico | |
+| Controller Power Source | USB or Input Port | |
+| Base Code | Triple_LED_Driver.py | |
+| PWM Frequency | 100 | kHz |
+| Input Voltage | 7 - 17.5 | V |
+| Output Voltage | 0 - 17.5 | V |
+| Max Current | ~1000 | mA |
+
+### New LED Loads
+
+| Specification | Value | Unit |
+| ------------- | ----- | ---- |
+| Power Rating | ~3 | W |
+| Voltage Drop (varies with colour) | ~3 | V |
+| Current Rating (also varies with colour) | ~1000 | mA |
+
+### OLD LED Driver SMPS - Left this here incase we need to use the old boards temporarily
+
+| ![Photo of old LED setup](doc/old_led.jpg) |
+|:--:|
+| _Old LED Driver and LED_ | 
+
+[Schematic of the LED Driver](doc/LED_Driver_SCM.pdf)
+
+[Example code for LED Driver - This will cycle through different current references for a closed loop current controller](LED_Driver_Example.py)
+
+| Specification | Value | Unit |
+| ------------- | ----- | ---- |
+| Circuit Type | Buck | |
+| Current Sensing | Unidirectional at output negative line | |
+| Controller Type | Raspberry Pi Pico | |
+| Controller Power Source | USB or Input Port | |
+| Base Code | LED_Driver.py | |
+| PWM Frequency | 100 | kHz |
+| Input Voltage | 7 - 17.5 | V |
+| Output Voltage | 0 - 17.5 | V |
+| Max Current | ~500 | mA |
+
+### OLD LED Loads - Left this here incase we need to use the old boards temporarily
+
+| Specification | Value | Unit |
+| ------------- | ----- | ---- |
+| Power Rating | 1 | W |
+| Voltage Drop (varies with colour) | ~3 | V |
+| Current Rating (also varies with colour) | ~300 | mA |
