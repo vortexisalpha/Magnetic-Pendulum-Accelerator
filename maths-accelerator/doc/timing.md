@@ -48,12 +48,12 @@ We can also see the period of each clock in the 'Clock Summary':
 
 ![A list of clock frequencies in the design. `clk_fpga_3` has a frequency of 50 MHz and a period of 20ns.](clock-summary.png)
 
-Since the period of the `clk_fpga_3` is 20ns and the WNS is -3.58ns, we can deduce that the maximum clock frequency that would not result in timing violation is $1/(20.0 - (-3.58\text{ ns})) = 42.4 \text{ MHz}$.
+Since the period of the `clk_fpga_3` is 20ns and the WNS is -3.58ns, we can deduce that the maximum clock frequency that would not result in timing violation is $1/(20.0\text{ ns} - (-3.58\text{ ns})) = 42.4 \text{ MHz}$.
 
 > [!NOTE]  
 > The original version of the base overlay connects the pixel generator to `clk_fpga_1`, with a frequency of 143 MHz. Under this clock, the WNS would be -16.6ns.
 
-You can find out exactly which registers in your design have timing violations by right-clicking on the affected clock in the report and choosing `report timing`. The resulting list shows pairs of registers where the propagation delay between them is too great. All the paths shown here start at a register holding part of the pixel coordinates and terminate at the VDMA, which shows that the critical timing path includes the entire computation of the pixel colour and packing it into the output stream.
+You can find out exactly which registers in your design have timing violations by right-clicking on the affected clock in the report and choosing `report timing`. The resulting list shows pairs of registers where the propagation delay between them is too great. All the paths shown here start at a register holding part of the pixel coordinates and terminate in the VDMA, which shows that the critical timing path includes the entire computation of the pixel colour and packing it into the output stream.
 
 ![A list of paths that fail timing](timing-checks.png)
 
