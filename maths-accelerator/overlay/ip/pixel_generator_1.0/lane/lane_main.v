@@ -1,5 +1,3 @@
-
-
 module lane_main #(
     parameter W = 16,
     parameter F = 12,
@@ -8,10 +6,8 @@ module lane_main #(
 )(
     input clk,
     input rst,
-
     //========================================================================================
     //                  Physical paramater inputs
-    //========================================================================================
     input logic signed [W-1:0] mag0_x, mag0_y,
     input logic signed [W-1:0] mag1_x, mag1_y,
     input logic signed [W-1:0] mag2_x, mag2_y,
@@ -80,13 +76,16 @@ logic [11:0] s2_step_cnt;
 logic [14:0] s2_id;
 logic s2_valid;
 
+//combinatorial outputs for fx_mul modules
+logic signed [W-1:0] s2_dx0_sq_w, s2_dy0_sq_w, s2_dx1_sq_w, s2_dy1_sq_w, s2_dx2_sq_w, s2_dy2_sq_w;
+
 //square dx and dy values per magnet (6 total) using fx_mul module - 6 DSPs used
-fx_mul #(.W(W), .F(F)) s2_m_dx0 (.a(s1_dx0),.b(s1_dx0),.c(s2_dx0_sq));
-fx_mul #(.W(W), .F(F)) s2_m_dy0 (.a(s1_dy0),.b(s1_dy0),.c(s2_dy0_sq));
-fx_mul #(.W(W), .F(F)) s2_m_dx1 (.a(s1_dx1),.b(s1_dx1),.c(s2_dx1_sq));
-fx_mul #(.W(W), .F(F)) s2_m_dy1 (.a(s1_dy1),.b(s1_dy1),.c(s2_dy1_sq));
-fx_mul #(.W(W), .F(F)) s2_m_dx2 (.a(s1_dx2),.b(s1_dx2),.c(s2_dx2_sq));
-fx_mul #(.W(W), .F(F)) s2_m_dy2 (.a(s1_dy2),.b(s1_dy2),.c(s2_dy2_sq));
+fx_mul #(.W(W), .F(F)) s2_m_dx0 (.a(s1_dx0),.b(s1_dx0),.c(s2_dx0_sq_w));
+fx_mul #(.W(W), .F(F)) s2_m_dy0 (.a(s1_dy0),.b(s1_dy0),.c(s2_dy0_sq_w));
+fx_mul #(.W(W), .F(F)) s2_m_dx1 (.a(s1_dx1),.b(s1_dx1),.c(s2_dx1_sq_w));
+fx_mul #(.W(W), .F(F)) s2_m_dy1 (.a(s1_dy1),.b(s1_dy1),.c(s2_dy1_sq_w));
+fx_mul #(.W(W), .F(F)) s2_m_dx2 (.a(s1_dx2),.b(s1_dx2),.c(s2_dx2_sq_w));
+fx_mul #(.W(W), .F(F)) s2_m_dy2 (.a(s1_dy2),.b(s1_dy2),.c(s2_dy2_sq_w));
 
 always @(posedge clk) begin
     if (rst) begin
@@ -107,6 +106,15 @@ always @(posedge clk) begin
         s2_vy <= s1_vy;
         s2_step_cnt <= s1_step_cnt;
         s2_id <= s1_id;
+
+
+        //register squared outputs for pipline
+        s2_dx0_sq <= s2_dx0_sq_w;
+        s2_dy0_sq <= s2_dy0_sq_w;
+        s2_dx1_sq <= s2_dx1_sq_w;
+        s2_dy1_sq <= s2_dy1_sq_w;
+        s2_dx2_sq <= s2_dx2_sq_w;
+        s2_dy2_sq <= s2_dy2_sq_w;
     end
 end
 
@@ -217,13 +225,17 @@ logic [11:0] s5_step_cnt;
 logic [14:0] s5_id;
 logic s5_valid;
 
+//intermediate combinatorial outputs for fx_mul modules
+logic signed [W-1:0] s5_dx_invq0_w, s5_dx_invq1_w, s5_dx_invq2_w;
+logic signed [W-1:0] s5_dy_invq0_w, s5_dy_invq1_w, s5_dy_invq2_w;
+
 //dx, dy values multipled with qinv - 6 DSPs used
-fx_mul #(.W(W), .F(F)) s5_m_dx0 (.a(s4_dx0),.b(s4_invq0),.c(s5_dx_invq0));
-fx_mul #(.W(W), .F(F)) s5_m_dy0 (.a(s4_dy0),.b(s4_invq0),.c(s5_dy_invq0));
-fx_mul #(.W(W), .F(F)) s5_m_dx1 (.a(s4_dx1),.b(s4_invq1),.c(s5_dx_invq1));
-fx_mul #(.W(W), .F(F)) s5_m_dy1 (.a(s4_dy1),.b(s4_invq1),.c(s5_dy_invq1));
-fx_mul #(.W(W), .F(F)) s5_m_dx2 (.a(s4_dx2),.b(s4_invq2),.c(s5_dx_invq2));
-fx_mul #(.W(W), .F(F)) s5_m_dy2 (.a(s4_dy2),.b(s4_invq2),.c(s5_dy_invq2));
+fx_mul #(.W(W), .F(F)) s5_m_dx0 (.a(s4_dx0),.b(s4_invq0),.c(s5_dx_invq0_w));
+fx_mul #(.W(W), .F(F)) s5_m_dy0 (.a(s4_dy0),.b(s4_invq0),.c(s5_dy_invq0_w));
+fx_mul #(.W(W), .F(F)) s5_m_dx1 (.a(s4_dx1),.b(s4_invq1),.c(s5_dx_invq1_w));
+fx_mul #(.W(W), .F(F)) s5_m_dy1 (.a(s4_dy1),.b(s4_invq1),.c(s5_dy_invq1_w));
+fx_mul #(.W(W), .F(F)) s5_m_dx2 (.a(s4_dx2),.b(s4_invq2),.c(s5_dx_invq2_w));
+fx_mul #(.W(W), .F(F)) s5_m_dy2 (.a(s4_dy2),.b(s4_invq2),.c(s5_dy_invq2_w));
 
 always @(posedge clk) begin
     if (rst) begin
@@ -238,11 +250,18 @@ always @(posedge clk) begin
         s5_vy <= s4_vy;
         s5_step_cnt <= s4_step_cnt;
         s5_id <= s4_id;
+        // register invq products so they align w pipeline
+        s5_dx_invq0 <= s5_dx_invq0_w;
+        s5_dy_invq0 <= s5_dy_invq0_w;
+        s5_dx_invq1 <= s5_dx_invq1_w;
+        s5_dy_invq1 <= s5_dy_invq1_w;
+        s5_dx_invq2 <= s5_dx_invq2_w;
+        s5_dy_invq2 <= s5_dy_invq2_w;
     end
 end
 
 //========================================================================================
-//                  S6: multiply dx, dy with qinv (6 DSPs)
+//                  S6: find a by mutliplying and adding (6 DSPs)
 //========================================================================================
 //outputs
 
@@ -253,13 +272,14 @@ logic [11:0] s6_step_cnt;
 logic [14:0] s6_id;
 logic s6_valid;
 
-//intermediate
+//intermediate sums and combinatorial multiplier outputs
 logic signed [W-1:0] dx_invq_sum, dy_invq_sum;
-
-// intermediate wires for multiplier outputs
 logic signed [W-1:0] gamma_vel_x_w, gamma_vel_y_w;
 logic signed [W-1:0] omega2_pos_x_w, omega2_pos_y_w;
 logic signed [W-1:0] mu_dx_invq_w, mu_dy_invq_w;
+
+//combinatorial ax and ay outputs
+logic signed [W-1:0] s6_ax_w, s6_ay_w;
 
 //multiply w physical paramaters
 fx_mul #(.W(W), .F(F)) m_gamma_vel_x (.a(gamma), .b(s5_vx), .c(gamma_vel_x_w));
@@ -270,13 +290,12 @@ fx_mul #(.W(W), .F(F)) m_mu_dx_invq (.a(mu), .b(dx_invq_sum), .c(mu_dx_invq_w));
 fx_mul #(.W(W), .F(F)) m_mu_dy_invq (.a(mu), .b(dy_invq_sum), .c(mu_dy_invq_w));
 
 always_comb begin
-    // sum contributions from all magnets
     dx_invq_sum = s5_dx_invq0 + s5_dx_invq1 + s5_dx_invq2;
     dy_invq_sum = s5_dy_invq0 + s5_dy_invq1 + s5_dy_invq2;
 
     // combine multiplier outputs into accelerations
-    s6_ax = mu_dx_invq_w - gamma_vel_x_w + omega2_pos_x_w;
-    s6_ay = mu_dy_invq_w - gamma_vel_y_w + omega2_pos_y_w;
+    s6_ax_w = mu_dx_invq_w - gamma_vel_x_w - omega2_pos_x_w;
+    s6_ay_w = mu_dy_invq_w - gamma_vel_y_w - omega2_pos_y_w;
 end
 
 always @(posedge clk) begin
@@ -292,6 +311,10 @@ always @(posedge clk) begin
         s6_vy <= s5_vy;
         s6_step_cnt <= s5_step_cnt;
         s6_id <= s5_id;
+
+        //registers for alignment of combinatorial outputs
+        s6_ax <= s6_ax_w;
+        s6_ay <= s6_ay_w;
     end
 end
 
