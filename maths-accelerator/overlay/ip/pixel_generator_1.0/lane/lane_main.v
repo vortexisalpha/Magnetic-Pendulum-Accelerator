@@ -81,12 +81,12 @@ logic [14:0] s2_id;
 logic s2_valid;
 
 //square dx and dy values per magnet (6 total) using fx_mul module - 6 DSPs used
-fx_mul #(.W(W), .F(F)) m_dx0 (.a(s1_dx0),.b(s1_dx0),.c(s2_dx0_sq));
-fx_mul #(.W(W), .F(F)) m_dy0 (.a(s1_dy0),.b(s1_dy0),.c(s2_dy0_sq));
-fx_mul #(.W(W), .F(F)) m_dx1 (.a(s1_dx1),.b(s1_dx1),.c(s2_dx1_sq));
-fx_mul #(.W(W), .F(F)) m_dy1 (.a(s1_dy1),.b(s1_dy1),.c(s2_dy1_sq));
-fx_mul #(.W(W), .F(F)) m_dx2 (.a(s1_dx2),.b(s1_dx2),.c(s2_dx2_sq));
-fx_mul #(.W(W), .F(F)) m_dy2 (.a(s1_dy2),.b(s1_dy2),.c(s2_dy2_sq));
+fx_mul #(.W(W), .F(F)) s2_m_dx0 (.a(s1_dx0),.b(s1_dx0),.c(s2_dx0_sq));
+fx_mul #(.W(W), .F(F)) s2_m_dy0 (.a(s1_dy0),.b(s1_dy0),.c(s2_dy0_sq));
+fx_mul #(.W(W), .F(F)) s2_m_dx1 (.a(s1_dx1),.b(s1_dx1),.c(s2_dx1_sq));
+fx_mul #(.W(W), .F(F)) s2_m_dy1 (.a(s1_dy1),.b(s1_dy1),.c(s2_dy1_sq));
+fx_mul #(.W(W), .F(F)) s2_m_dx2 (.a(s1_dx2),.b(s1_dx2),.c(s2_dx2_sq));
+fx_mul #(.W(W), .F(F)) s2_m_dy2 (.a(s1_dy2),.b(s1_dy2),.c(s2_dy2_sq));
 
 always @(posedge clk) begin
     if (rst) begin
@@ -218,12 +218,12 @@ logic [14:0] s5_id;
 logic s5_valid;
 
 //dx, dy values multipled with qinv - 6 DSPs used
-fx_mul #(.W(W), .F(F)) m_dx0 (.a(s4_dx0),.b(s4_invq0),.c(s5_dx_invq0));
-fx_mul #(.W(W), .F(F)) m_dy0 (.a(s4_dy0),.b(s4_invq0),.c(s5_dy_invq0));
-fx_mul #(.W(W), .F(F)) m_dx1 (.a(s4_dx1),.b(s4_invq1),.c(s5_dx_invq1));
-fx_mul #(.W(W), .F(F)) m_dy1 (.a(s4_dy1),.b(s4_invq1),.c(s5_dy_invq1));
-fx_mul #(.W(W), .F(F)) m_dx2 (.a(s4_dx2),.b(s4_invq2),.c(s5_dx_invq2));
-fx_mul #(.W(W), .F(F)) m_dy2 (.a(s4_dy2),.b(s4_invq2),.c(s5_dy_invq2));
+fx_mul #(.W(W), .F(F)) s5_m_dx0 (.a(s4_dx0),.b(s4_invq0),.c(s5_dx_invq0));
+fx_mul #(.W(W), .F(F)) s5_m_dy0 (.a(s4_dy0),.b(s4_invq0),.c(s5_dy_invq0));
+fx_mul #(.W(W), .F(F)) s5_m_dx1 (.a(s4_dx1),.b(s4_invq1),.c(s5_dx_invq1));
+fx_mul #(.W(W), .F(F)) s5_m_dy1 (.a(s4_dy1),.b(s4_invq1),.c(s5_dy_invq1));
+fx_mul #(.W(W), .F(F)) s5_m_dx2 (.a(s4_dx2),.b(s4_invq2),.c(s5_dx_invq2));
+fx_mul #(.W(W), .F(F)) s5_m_dy2 (.a(s4_dy2),.b(s4_invq2),.c(s5_dy_invq2));
 
 always @(posedge clk) begin
     if (rst) begin
