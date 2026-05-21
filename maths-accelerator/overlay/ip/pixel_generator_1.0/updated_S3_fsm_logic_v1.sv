@@ -18,18 +18,18 @@ fx_adder_s3 #(.W(W), .F(F)) s3_q2_adder (.a(s2_dx2_sq), .b(s2_dy2_sq), .c(h2), .
 
 // new declarations
 // also need input declarations of r_settle, v_settle,
-logic [1:0] s3_magnet_id;
+logic [1:0] s3_magnet_id；
 
 
 //settle count declarations
-logic [W:0] s3_d0, s3_d1, s3_d2;
+logic [W-1:0] s3_d0, s3_d1, s3_d2;
 fx_adder_two_input #(.W(W), .F(F)) s3_d0_adder (.a(s2_dx0_sq), .b(s2_dy0_sq), .c(s3_d0));
 fx_adder_two_input #(.W(W), .F(F)) s3_d1_adder (.a(s2_dx1_sq), .b(s2_dy1_sq), .c(s3_d1));
 fx_adder_two_input #(.W(W), .F(F)) s3_d2_adder (.a(s2_dx2_sq), .b(s2_dy2_sq), .c(s3_d2));
 
 logic [W-1:0] abs_vx, abs_vy;
 logic [1:0] nearest_id;
-logic [W:0] min_d;
+logic [W-1:0] min_d;
 
 
 // ties are handled by priority
