@@ -80,7 +80,8 @@ def info():
 #add a magnet
 """
 request must be of form:
-    {   uid: str (note that this will be the type of arUco marker)
+    {   
+        uid: str (note that this will be the type of arUco marker)
         x: float
         y: float
     }
@@ -102,23 +103,74 @@ def magnet_add():
 """
 request must be of form:
     {
-        mag_number: 
+        uid:  str (type of arUco marker)
     }
 """
 @app.route('/magnet_remove', methods=["POST"])
 def magnet_remove():
+    data = request.get_json()
+
+    uid = data["uid"]
+    for i, magnet in enumerate(mp_data.mag_list):
+        if magnet.uid == uid:
+            mp_data.mag_list.pop(i)
+
     return {"ok" : 200}
 
+#update a magnets position
+"""
+request must be of form:
+    {   
+        uid: str (note that this will be the type of arUco marker)
+        x: float
+        y: float
+    }
+"""
 @app.route('/magnet_update_position')
 def magnet_update_position():
+    data = request.get_json()
+
+    uid = data["uid"]
+    x = float(data["x"])
+    y = float(data["y"])
+
+    for i, magnet in enumerate(mp_data.mag_list):
+        if magnet.uid == uid:
+            mp_data.mag_list[i].x = x
+            mp_data.mag_list[i].y = y
+
     return {"ok" : 200}
 
+#change the magnetic strength
+"""
+request must be of form:
+    {   
+        magnetic_strength: float
+    }
+"""
 @app.route('/magnetic_strength')
 def magnetic_strength():
+    data = request.get_json()
+
+    magnetic_strength = float(data["magnetic_strength"])
+    mp_data.magnetic_strength = magnetic_strength
+
     return {"ok" : 200}
 
+#change the damping factor 
+"""
+request must be of form:
+    {   
+        damping_factor: float
+    }
+"""
 @app.route('/damping_factor')
-def magnetic_density():
+def damping_factor():
+    data = request.get_json()
+
+    damping_factor = float(data["damping_factor"])
+    mp_data.damping_factor = damping_factor 
+
     return {"ok" : 200}
 
 @app.route('/height_of_pendulum')
