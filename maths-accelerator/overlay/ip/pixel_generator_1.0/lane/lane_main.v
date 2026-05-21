@@ -31,7 +31,7 @@ module lane_main #(
     output logic out_valid,
     output logic signed [W-1:0] out_x, out_y, out_vx, out_vy,
     output logic [11:0] out_step_cnt,
-    output logic [14:0] out_id
+    output logic [14:0] out_id,
 
     output logic [1:0] out_settle_count
 );
@@ -280,63 +280,114 @@ always @(posedge clk) begin
 end
 
 //========================================================================================
-//                  S6: find a by mutliplying and adding (6 DSPs)
+//            S6a: multiply gamma_vel, omega2x, sum all dy dx with qinv multiplied
 //========================================================================================
 //outputs
 
-logic signed [W-1:0] s6_ax;
-logic signed [W-1:0] s6_ay;
-logic signed [W-1:0] s6_x, s6_y, s6_vx, s6_vy;
-logic [11:0] s6_step_cnt;
-logic [14:0] s6_id;
-logic s6_valid;
+logic signed [W-1:0] s6a_x, s6a_y, s6a_vx, s6a_vy;
+logic [11:0] s6a_step_cnt;
+logic [14:0] s6a_id;
+logic s6a_valid;
 
-logic [1:0] s6_settle_count;
+logic [1:0] s6a_settle_count;
 
 //intermediate sums and combinatorial multiplier outputs
-logic signed [W-1:0] dx_invq_sum, dy_invq_sum;
+logic signed [W-1:0] dx_invq_sum_w, dy_invq_sum_w;
 logic signed [W-1:0] gamma_vel_x_w, gamma_vel_y_w;
 logic signed [W-1:0] omega2_pos_x_w, omega2_pos_y_w;
-logic signed [W-1:0] mu_dx_invq_w, mu_dy_invq_w;
 
-//combinatorial ax and ay outputs
-logic signed [W-1:0] s6_ax_w, s6_ay_w;
+//for pipeline
+logic signed [W-1:0] s6a_dx_invq_sum, s6a_dy_invq_sum;
+logic signed [W-1:0] s6a_gamma_vel_x, s6a_gamma_vel_y;
+logic signed [W-1:0] s6a_omega2_pos_x, s6a_omega2_pos_y;
+
+
 
 //multiply w physical paramaters
 fx_mul #(.W(W), .F(F)) m_gamma_vel_x (.a(gamma), .b(s5_vx), .c(gamma_vel_x_w));
 fx_mul #(.W(W), .F(F)) m_omega2_pos_x (.a(omega2), .b(s5_x), .c(omega2_pos_x_w));
 fx_mul #(.W(W), .F(F)) m_gamma_vel_y (.a(gamma), .b(s5_vy), .c(gamma_vel_y_w));
 fx_mul #(.W(W), .F(F)) m_omega2_pos_y (.a(omega2), .b(s5_y), .c(omega2_pos_y_w));
-fx_mul #(.W(W), .F(F)) m_mu_dx_invq (.a(mu), .b(dx_invq_sum), .c(mu_dx_invq_w));
-fx_mul #(.W(W), .F(F)) m_mu_dy_invq (.a(mu), .b(dy_invq_sum), .c(mu_dy_invq_w));
 
 always_comb begin
-    dx_invq_sum = s5_dx_invq0 + s5_dx_invq1 + s5_dx_invq2;
-    dy_invq_sum = s5_dy_invq0 + s5_dy_invq1 + s5_dy_invq2;
-
-    // combine multiplier outputs into accelerations
-    s6_ax_w = mu_dx_invq_w - gamma_vel_x_w - omega2_pos_x_w;
-    s6_ay_w = mu_dy_invq_w - gamma_vel_y_w - omega2_pos_y_w;
+    dx_invq_sum_w = s5_dx_invq0 + s5_dx_invq1 + s5_dx_invq2;
+    dy_invq_sum_w = s5_dy_invq0 + s5_dy_invq1 + s5_dy_invq2;
 end
 
 always @(posedge clk) begin
     if (rst) begin
-        s6_valid <= 0;
+        s6a_valid <= 0;
     end
     else begin
         //pass through values
-        s6_valid <= s5_valid;
-        s6_x <= s5_x;
-        s6_y <= s5_y;
-        s6_vx <= s5_vx;
-        s6_vy <= s5_vy;
-        s6_step_cnt <= s5_step_cnt;
-        s6_id <= s5_id;
-        s6_settle_count <= s5_settle_count;
+        s6a_valid <= s5_valid;
+        s6a_x <= s5_x;
+        s6a_y <= s5_y;
+        s6a_vx <= s5_vx;
+        s6a_vy <= s5_vy;
+        s6a_step_cnt <= s5_step_cnt;
+        s6a_id <= s5_id;
+        s6a_settle_count <= s5_settle_count;
 
         //registers for alignment of combinatorial outputs
-        s6_ax <= s6_ax_w;
-        s6_ay <= s6_ay_w;
+        s6a_dx_invq_sum <= dx_invq_sum_w;
+        s6a_dy_invq_sum <= dy_invq_sum_w;
+
+        s6a_gamma_vel_x <= gamma_vel_x_w;
+        s6a_omega2_pos_x <= omega2_pos_x_w;
+
+        s6a_gamma_vel_y <= gamma_vel_y_w;
+        s6a_omega2_pos_y <= omega2_pos_y_w;
+    end
+end
+
+
+//========================================================================================
+//            S6b: multiply gamma_vel, omega2x, sum all dy dx with qinv multiplied
+//========================================================================================
+//outputs
+logic signed [W-1:0] s6b_x, s6b_y, s6b_vx, s6b_vy;
+logic [11:0] s6b_step_cnt;
+logic [14:0] s6b_id;
+logic s6b_valid;
+
+logic signed [W-1:0] s6b_ax, s6b_ay;
+
+
+logic [1:0] s6b_settle_count;
+
+logic signed [W-1:0] s6b_ax_w;
+logic signed [W-1:0] s6b_ay_w;
+logic signed [W-1:0] mu_dx_invq_w, mu_dy_invq_w;
+
+
+fx_mul #(.W(W), .F(F)) m_mu_dx_invq (.a(mu), .b(s6a_dx_invq_sum), .c(mu_dx_invq_w));
+fx_mul #(.W(W), .F(F)) m_mu_dy_invq (.a(mu), .b(s6a_dy_invq_sum), .c(mu_dy_invq_w));
+
+always_comb begin
+    // combine multiplier outputs into accelerations
+    s6b_ax_w = mu_dx_invq_w - s6a_gamma_vel_x - s6a_omega2_pos_x;
+    s6b_ay_w = mu_dy_invq_w - s6a_gamma_vel_y - s6a_omega2_pos_y;
+end
+
+always @(posedge clk) begin
+    if (rst) begin
+        s6b_valid <= 0;
+    end
+    else begin
+        //pass through values
+        s6b_valid <= s6a_valid;
+        s6b_x <= s6a_x;
+        s6b_y <= s6a_y;
+        s6b_vx <= s6a_vx;
+        s6b_vy <= s6a_vy;
+        s6b_step_cnt <= s6a_step_cnt;
+        s6b_id <= s6a_id;
+        s6b_settle_count <= s6a_settle_count;
+
+        //register ax and ay for pipeline alignment
+        s6b_ax <= s6b_ax_w;
+        s6b_ay <= s6b_ay_w;
     end
 end
 
@@ -356,8 +407,8 @@ logic [1:0] s7_settle_count;
 //intermediate
 logic signed [W-1:0] dt_ax, dt_ay;
 
-fx_mul #(.W(W), .F(F)) m_dt_ax (.a(dt),.b(s6_ax),.c(dt_ax));
-fx_mul #(.W(W), .F(F)) m_dt_ay (.a(dt),.b(s6_ay),.c(dt_ay));
+fx_mul #(.W(W), .F(F)) m_dt_ax (.a(dt),.b(s6b_ax),.c(dt_ax));
+fx_mul #(.W(W), .F(F)) m_dt_ay (.a(dt),.b(s6b_ay),.c(dt_ay));
 
 always @(posedge clk) begin
     if (rst) begin
@@ -365,17 +416,17 @@ always @(posedge clk) begin
     end
     else begin
         //update velocity with dt_ax and dt_ay
-        s7_vx <= s6_vx + dt_ax;
-        s7_vy <= s6_vy + dt_ay;
+        s7_vx <= s6b_vx + dt_ax;
+        s7_vy <= s6b_vy + dt_ay;
 
         //pass through values
-        s7_valid <= s6_valid;
-        s7_x <= s6_x;
-        s7_y <= s6_y;
-        s7_step_cnt <= s6_step_cnt;
-        s7_id <= s6_id;
+        s7_valid <= s6b_valid;
+        s7_x <= s6b_x;
+        s7_y <= s6b_y;
+        s7_step_cnt <= s6b_step_cnt;
+        s7_id <= s6b_id;
 
-        s7_settle_count <= s6_settle_count;
+        s7_settle_count <= s6b_settle_count;
     end
 end
 
