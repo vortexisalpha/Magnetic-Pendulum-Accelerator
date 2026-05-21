@@ -60,7 +60,7 @@ input           s_axi_lite_wvalid
 
 localparam X_SIZE = 640;
 localparam Y_SIZE = 480;
-parameter  REG_FILE_SIZE = 8;
+parameter  REG_FILE_SIZE = 16; // edited to account for 16 regs 
 localparam REG_FILE_AWIDTH = $clog2(REG_FILE_SIZE);
 parameter  AXI_LITE_ADDR_WIDTH = 8;
 
@@ -82,6 +82,7 @@ reg [REG_FILE_AWIDTH-1:0]           writeAddr, readAddr;
 reg [31:0]                          readData, writeData;
 reg [1:0]                           readState = AWAIT_RADD;
 reg [2:0]                           writeState = AWAIT_WADD_AND_DATA;
+
 
 //Read from the register file
 always @(posedge s_axi_lite_aclk) begin
@@ -204,11 +205,11 @@ always @(posedge out_stream_aclk) begin
     if (periph_resetn) begin
         if (ready & valid_int) begin
             if (lastx) begin
-                x <= 9'd0;
+                x <= 10'd0;
                 if (lasty) y <= 9'd0;
                 else y <= y + 9'd1;
             end
-            else x <= x + 9'd1;
+            else x <= x + 10'd1;
         end
     end
     else begin
@@ -219,10 +220,55 @@ end
 
 wire valid_int = 1'b1;
 
-wire [7:0] r, g, b;
-assign r = x[7:0] + frame;
-assign g = y[7:0] + frame;
-assign b = x[6:0]+y[6:0] + frame;
+
+reg [7:0] px;
+reg [6:0] py;
+
+always @(posedge out_stream_aclk) begin
+    if (!periph_resetn) begin
+        px <= 0;
+        py <= 0;
+    end else if (ready & valid_int) begin
+        if (lastx) begin
+            px <= 0;
+            if (y[1:0] == 2'b11) begin
+                if (lasty) py <= 0;
+                else       py <= py + 1;
+            end
+        end else begin
+            if (x[1:0] == 2'b11)
+                px <= px + 1;
+        end
+    end
+end
+
+// Coordinate mapper: pixel (x,y) → physical (x0,y0)
+// regfile[1..4] hold viewport bounds as Q4.12 values
+// regfile[0] kept as frame/control register
+
+wire signed [15:0] x0, y0;
+
+coordinate_mapper #(
+    .IMG_W (160),
+    .IMG_H (120),
+    .W     (16),
+    .F     (12)
+) u_coord_mapper (
+    .x_min (regfile[1][15:0]),
+    .x_max (regfile[2][15:0]),
+    .y_min (regfile[3][15:0]),
+    .y_max (regfile[4][15:0]),
+    .p     (px),            // raster x: 0..159
+    .q     (py),            // raster y: 0..119
+    .x0    (x0),
+    .y0    (y0)
+);
+
+// Placeholder colours until lane_main is wired in
+// x0, y0 feed into lane_main next
+wire [7:0] r = x0[11:4];       // middle bits give visible gradient
+wire [7:0] g = y0[11:4];
+wire [7:0] b = 8'hFF;
 
 packer pixel_packer(    .aclk(out_stream_aclk),
                         .aresetn(periph_resetn),
