@@ -375,6 +375,9 @@ logic [1:0] s6b_settle_count;
 logic signed [W-1:0] mu_dx_invq, mu_dy_invq;
 logic signed [W-1:0] mu_dx_invq_w, mu_dy_invq_w;
 
+logic signed [W-1:0] s6b_gamma_vel_x, s6b_gamma_vel_y;
+logic signed [W-1:0] s6b_omega2_pos_x, s6b_omega2_pos_y;
+
 
 fx_mul #(.W(W), .F(F)) m_mu_dx_invq (.a(mu), .b(s6a_dx_invq_sum), .c(mu_dx_invq_w));
 fx_mul #(.W(W), .F(F)) m_mu_dy_invq (.a(mu), .b(s6a_dy_invq_sum), .c(mu_dy_invq_w));
@@ -393,6 +396,11 @@ always @(posedge clk) begin
         s6b_step_cnt <= s6a_step_cnt;
         s6b_id <= s6a_id;
         s6b_settle_count <= s6a_settle_count;
+
+        s6b_gamma_vel_x <= s6a_gamma_vel_x;
+        s6b_omega2_pos_x <= s6a_omega2_pos_x;
+        s6b_gamma_vel_y <= s6a_gamma_vel_y;
+        s6b_omega2_pos_y <= s6a_omega2_pos_y;
 
         //register ax and ay for pipeline alignment
         mu_dx_invq <= mu_dx_invq_w;
@@ -414,8 +422,8 @@ logic [1:0] s6c_settle_count;
 logic signed [W-1:0] s6c_ax, s6c_ay;
 logic signed [W-1:0] s6c_ax_w, s6c_ay_w;
 
-fx_sub_three_input #(.W(W), .F(F)) s6c_ax_subtractor (.a(mu_dx_invq), .b(s6a_gamma_vel_x), .c(s6a_omega2_pos_x), .d(s6c_ax_w));
-fx_sub_three_input #(.W(W), .F(F)) s6c_ay_subtractor (.a(mu_dy_invq), .b(s6a_gamma_vel_y), .c(s6a_omega2_pos_y), .d(s6c_ay_w));
+fx_sub_three_input #(.W(W), .F(F)) s6c_ax_subtractor (.a(mu_dx_invq), .b(s6b_gamma_vel_x), .c(s6b_omega2_pos_x), .d(s6c_ax_w));
+fx_sub_three_input #(.W(W), .F(F)) s6c_ay_subtractor (.a(mu_dy_invq), .b(s6b_gamma_vel_y), .c(s6b_omega2_pos_y), .d(s6c_ay_w));
 
 always @(posedge clk) begin
     if (rst) begin
@@ -440,62 +448,131 @@ end
 
 
 //========================================================================================
-//                  S7: update new value of v
+//                  S7a: find dt_ax and dt_ay
 //========================================================================================
 //outputs
 
-logic signed [W-1:0] s7_x, s7_y, s7_vx, s7_vy;
-logic signed [W-1:0] s7_vx_w, s7_vy_w;
-logic [11:0] s7_step_cnt;
-logic [14:0] s7_id;
-logic s7_valid;
+logic signed [W-1:0] s7a_x, s7a_y, s7a_vx, s7a_vy;
+logic [11:0] s7a_step_cnt;
+logic [14:0] s7a_id;
+logic s7a_valid;
 
-logic [1:0] s7_settle_count;
+logic [1:0] s7a_settle_count;
 
-//intermediate
-logic signed [W-1:0] dt_ax, dt_ay;
+logic signed [W-1:0] s7a_dt_ax, s7a_dt_ay;
+logic signed [W-1:0] s7a_dt_ax_w, s7a_dt_ay_w;
 
-fx_mul #(.W(W), .F(F)) m_dt_ax (.a(dt),.b(s6c_ax),.c(dt_ax));
-fx_mul #(.W(W), .F(F)) m_dt_ay (.a(dt),.b(s6c_ay),.c(dt_ay));
+fx_mul #(.W(W), .F(F)) m_dt_ax (.a(dt),.b(s6c_ax),.c(s7a_dt_ax_w));
+fx_mul #(.W(W), .F(F)) m_dt_ay (.a(dt),.b(s6c_ay),.c(s7a_dt_ay_w));
 
-fx_adder_two_input #(.W(W), .F(F)) s7_vx_adder (.a(s6c_vx), .b(dt_ax), .c(s7_vx_w));
-fx_adder_two_input #(.W(W), .F(F)) s7_vy_adder (.a(s6c_vy), .b(dt_ay), .c(s7_vy_w));
 
 always @(posedge clk) begin
     if (rst) begin
-        s7_valid <= 0;
+        s7a_valid <= 0;
     end
     else begin
         //update velocity with dt_ax and dt_ay
-        s7_vx <= s7_vx_w;
-        s7_vy <= s7_vy_w;
+        s7a_dt_ax <= s7a_dt_ax_w;
+        s7a_dt_ay <= s7a_dt_ay_w;
 
         //pass through values
-        s7_valid <= s6c_valid;
-        s7_x <= s6c_x;
-        s7_y <= s6c_y;
-        s7_step_cnt <= s6c_step_cnt;
-        s7_id <= s6c_id;
+        s7a_valid <= s6c_valid;
+        s7a_x <= s6c_x;
+        s7a_y <= s6c_y;
+        s7a_vx <= s6c_vx;
+        s7a_vy <= s6c_vy;
+        s7a_step_cnt <= s6c_step_cnt;
+        s7a_id <= s6c_id;
 
-        s7_settle_count <= s6c_settle_count;
+        s7a_settle_count <= s6c_settle_count;
     end
 end
 
 //========================================================================================
-//                  S8: update new value of x and y
+//                  S7b: update new value of v
 //========================================================================================
 //outputs
 
-//intermediate
-logic signed [W-1:0] dt_x, dt_y;
+logic signed [W-1:0] s7b_x, s7b_y, s7b_vx, s7b_vy;
+logic [11:0] s7b_step_cnt;
+logic [14:0] s7b_id;
+logic s7b_valid;
+
+logic [1:0] s7b_settle_count;
+
+logic signed [W-1:0] s7b_vx_w, s7b_vy_w;
+
+fx_adder_two_input #(.W(W), .F(F)) s7b_vx_adder (.a(s7a_vx), .b(s7a_dt_ax), .c(s7b_vx_w));
+fx_adder_two_input #(.W(W), .F(F)) s7b_vy_adder (.a(s7a_vy), .b(s7a_dt_ay), .c(s7b_vy_w));
+
+always @(posedge clk) begin
+    if (rst) begin
+        s7b_valid <= 0;
+    end
+    else begin
+        //update velocity with dt_ax and dt_ay
+        s7b_vx <= s7b_vx_w;
+        s7b_vy <= s7b_vy_w;
+
+        //pass through values
+        s7b_valid <= s7a_valid;
+        s7b_x <= s7a_x;
+        s7b_y <= s7a_y;
+        s7b_step_cnt <= s7a_step_cnt;
+        s7b_id <= s7a_id;
+
+        s7b_settle_count <= s7a_settle_count;
+    end
+end
+
+
+//========================================================================================
+//                  S8a: update new value of x and y
+//========================================================================================
+//outputs
+logic signed [W-1:0] s8a_x, s8a_y, s8a_vx, s8a_vy;
+logic [11:0] s8a_step_cnt;
+logic [14:0] s8a_id;
+logic s8a_valid;
+logic [1:0] s8a_settle_count;
+
+logic signed [W-1:0] s8a_dt_x, s8a_dt_y;
+logic signed [W-1:0] s8a_dt_x_w, s8a_dt_y_w;
+
+fx_mul #(.W(W), .F(F)) m_dt_x (.a(dt),.b(s7b_vx),.c(s8a_dt_x_w));
+fx_mul #(.W(W), .F(F)) m_dt_y (.a(dt),.b(s7b_vy),.c(s8a_dt_y_w));
+
+always @(posedge clk) begin
+    if (rst) begin
+        s8a_valid <= 0;
+    end
+    else begin
+        s8a_dt_x <= s8a_dt_x_w;
+        s8a_dt_y <= s8a_dt_y_w;
+
+        //pass through values
+        s8a_valid <= s7b_valid;
+        s8a_vx <= s7b_vx;
+        s8a_vy <= s7b_vy;
+        s8a_step_cnt <= s7b_step_cnt;//increment step count
+        s8a_id <= s7b_id;
+
+        s8a_x <= s7b_x;
+        s8a_y <= s7b_y;
+
+        s8a_settle_count <= s7b_settle_count;
+    end
+end
+
+
+//========================================================================================
+//                  S8b: update new value of x and y
+//========================================================================================
 
 logic signed [W-1:0] out_x_w, out_y_w;
 
-fx_mul #(.W(W), .F(F)) m_dt_x (.a(dt),.b(s7_vx),.c(dt_x));
-fx_mul #(.W(W), .F(F)) m_dt_y (.a(dt),.b(s7_vy),.c(dt_y));
-
-fx_adder_two_input #(.W(W), .F(F)) out_x_adder (.a(s7_x), .b(dt_x), .c(out_x_w));
-fx_adder_two_input #(.W(W), .F(F)) out_y_adder (.a(s7_y), .b(dt_y), .c(out_y_w));
+fx_adder_two_input #(.W(W), .F(F)) out_x_adder (.a(s8a_x), .b(s8a_dt_x), .c(out_x_w));
+fx_adder_two_input #(.W(W), .F(F)) out_y_adder (.a(s8a_y), .b(s8a_dt_y), .c(out_y_w));
 
 always @(posedge clk) begin
     if (rst) begin
@@ -507,14 +584,16 @@ always @(posedge clk) begin
         out_y <= out_y_w;
 
         //pass through values
-        out_valid <= s7_valid;
-        out_vx <= s7_vx;
-        out_vy <= s7_vy;
-        out_step_cnt <= s7_step_cnt+1;//increment step count
-        out_id <= s7_id;
+        out_valid <= s8a_valid;
+        out_vx <= s8a_vx;
+        out_vy <= s8a_vy;
+        out_step_cnt <= s8a_step_cnt+1;//increment step count
+        out_id <= s8a_id;
 
-        out_settle_count <= s7_settle_count;
+        out_settle_count <= s8a_settle_count;
     end
 end
+
+
 
 endmodule
