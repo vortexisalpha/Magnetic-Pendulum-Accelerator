@@ -1,7 +1,4 @@
-module fsm_settle #(
-    parameter W = 16,
-    parameter F = 12
-)(
+module fsm_settle (
     input logic rst,
 
     // vals from last stage of lane
@@ -27,7 +24,7 @@ module fsm_settle #(
     // actual implementation then:
     // if settled ^ time_out: MUX output to FIFO
     // else: output back to S1
-    
+
 );
 
     always_comb begin
