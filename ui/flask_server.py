@@ -1,6 +1,35 @@
+from _typeshed import DataclassInstance
 from flask import Flask
+from dataclasses import dataclass
 
+#make backend flask app
 app = Flask(__name__)
+
+#DATA DECLARATIONS:
+
+#individual magnet x, y
+@dataclass
+class Magnet:
+    x: float 
+    y: float 
+
+#coordinates of the actual visualisation
+@dataclass
+class Grid:
+    x_min: float 
+    x_max: float
+    y_min: float 
+    y_max: float
+
+#MPData stands for magnetic pendulum data
+@dataclass
+class MPData:
+    mag_list: list[Magnet]
+    grid: Grid
+    magnetic_strength: float
+    damping_factor: float   
+    pendulum_height: float
+    pendulum_length: float
 
 @app.route('/')
 def ping():
