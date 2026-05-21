@@ -1,5 +1,5 @@
 from _typeshed import DataclassInstance
-from flask import Flask
+from flask import Flask, request
 from dataclasses import dataclass
 import json
 
@@ -75,11 +75,27 @@ def ping():
 def info():
     return construct_mpdata_json(mp_data)
 
-@app.route('/magnet_info')
+#magnet_add
+"""
+request must be of form:
+    {
+        x: float
+        y: float
+    }
+"""
+@app.route('/magnet_add', methods=["POST"])
 def magnet_info():
-    pass
+    data = request.get_json()
 
-@app.route('/magnet_position')
+    x = float(data["x"])
+    y = float(data["y"])
+
+    magnet = Magnet(x,y)
+    mp_data.mag_list.append(magnet)
+
+    return {"ok" : 200}
+
+@app.route('/magnet_update_position')
 def magnet_position():
     pass
 
