@@ -17,6 +17,9 @@ module lut_bram #(
         $readmemh("qinv32.mem", rom_array);
     end
     
+
+    //possibly do (q - qmin) * LUT SIZE / q(max - qmin) = idx
+    // but this uses 2 DSPS - check accuracy
     
     logic [LUT_ADDR_W-1:0] idx;
     
