@@ -11,7 +11,7 @@ module fx_adder_two_input #(
     output signed [W-1:0] c
 );
     //add a and b and put it into sum
-    wire signed [W+1:0] sum;
+    wire signed [W:0] sum;
     assign sum = a + b;
 
     //define saturation limits
