@@ -1,6 +1,11 @@
 from _typeshed import DataclassInstance
 from flask import Flask
 from dataclasses import dataclass
+import json
+
+# TODO: DISCUSS LATER
+SCREEN_SIZE_X = 160
+SCREEN_SIZE_Y = 120
 
 #make backend flask app
 app = Flask(__name__)
@@ -16,9 +21,9 @@ class Magnet:
 #coordinates of the actual visualisation
 @dataclass
 class Grid:
-    x_min: float 
+    x_min: float
     x_max: float
-    y_min: float 
+    y_min: float
     y_max: float
 
 #MPData stands for magnetic pendulum data
@@ -31,6 +36,30 @@ class MPData:
     pendulum_height: float
     pendulum_length: float
 
+def construct_mpdata_json(mp_data: MPData):
+    data = {}
+    #magnets
+    for i, magnet in enumerate(mp_data.mag_list):
+        temp_mag = {}
+        temp_mag["x"] = magnet.x
+        temp_mag["y"] = magnet.y
+
+        data["magnets"][f"magnet_{i}"] = temp_mag
+    
+    #grid
+    data["grid"]["x_min"] = mp_data.grid.x_min
+    data["grid"]["x_max"] = mp_data.grid.x_max
+    data["grid"]["y_min"] = mp_data.grid.y_min
+    data["grid"]["y_max"] = mp_data.grid.y_max
+
+    #other params
+    data["magnetic_strength"] = MPData.magnetic_strength
+    data["damping_factor"] = MPData.damping_factor
+    data["pendulum_height"] = MPData.pendulum_height
+    data["pendulum_length"] = MPData.pendulum_length
+
+    return json.dumps(data)
+
 @app.route('/')
 def ping():
     data_o = {"ping" : "true"}
@@ -39,14 +68,6 @@ def ping():
 #get request that the user pings
 @app.route('/info')
 def info():
-    data_o = {
-            "magnet_1" : {
-                "x": ""
-                "y": ""
-                }
-            "strength"
-            "length"...
-            }
     pass
 
 @app.route('/magnet_info')
