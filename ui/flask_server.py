@@ -3,6 +3,7 @@ from flask import Flask
 from dataclasses import dataclass
 import json
 
+
 # TODO: DISCUSS LATER
 SCREEN_SIZE_X = 160
 SCREEN_SIZE_Y = 120
@@ -29,13 +30,14 @@ class Grid:
 #MPData stands for magnetic pendulum data
 @dataclass
 class MPData:
-    mag_list: list[Magnet]
-    grid: Grid
-    magnetic_strength: float
-    damping_factor: float   
-    pendulum_height: float
-    pendulum_length: float
+    mag_list: list[Magnet] = []
+    grid: Grid = Grid()
+    magnetic_strength: float = 1
+    damping_factor: float = 1
+    pendulum_height: float = 1
+    pendulum_length: float = 1
 
+#main construction function for main get request endpoint
 def construct_mpdata_json(mp_data: MPData):
     data = {}
     #magnets
@@ -60,15 +62,18 @@ def construct_mpdata_json(mp_data: MPData):
 
     return json.dumps(data)
 
+#ALL ENDPOINTS:
+
+#default ping for checking connection
 @app.route('/')
 def ping():
     data_o = {"ping" : "true"}
     return data_o
 
-#get request that the user pings
+#all information user get request
 @app.route('/info')
 def info():
-    pass
+    return construct_mpdata_json(mp_data)
 
 @app.route('/magnet_info')
 def magnet_info():
@@ -95,4 +100,5 @@ def height_of_pendulum():
     pass
 
 if __name__ == "__main__":
+    mp_data = MPData()
     app.run()
