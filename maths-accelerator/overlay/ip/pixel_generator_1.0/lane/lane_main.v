@@ -44,6 +44,7 @@ module lane_main #(
 
 //outputs:
 logic signed [W-1:0] s1_dx0, s1_dy0, s1_dx1, s1_dy1, s1_dx2, s1_dy2;
+logic signed [W-1:0] s1_dx0_w, s1_dy0_w, s1_dx1_w, s1_dy1_w, s1_dx2_w, s1_dy2_w;
 logic signed [W-1:0] s1_x, s1_y, s1_vx, s1_vy;
 logic [11:0] s1_step_cnt;
 logic [14:0] s1_id;
@@ -51,18 +52,26 @@ logic s1_valid;
 
 logic [1:0] s1_settle_count;
 
+fx_sub_two_input #(.W(W), .F(F)) s1_sub_dx0 (.a(mag0_x),.b(pixel_x),.c(s1_dx0_w));
+fx_sub_two_input #(.W(W), .F(F)) s1_sub_dy0 (.a(mag0_y),.b(pixel_y),.c(s1_dy0_w));
+fx_sub_two_input #(.W(W), .F(F)) s1_sub_dx1 (.a(mag1_x),.b(pixel_x),.c(s1_dx1_w));
+fx_sub_two_input #(.W(W), .F(F)) s1_sub_dy1 (.a(mag1_y),.b(pixel_y),.c(s1_dy1_w));
+fx_sub_two_input #(.W(W), .F(F)) s1_sub_dx2 (.a(mag2_x),.b(pixel_x),.c(s1_dx2_w));
+fx_sub_two_input #(.W(W), .F(F)) s1_sub_dy2 (.a(mag2_y),.b(pixel_y),.c(s1_dy2_w));
+
+
 always @(posedge clk) begin
     if (rst) begin
         s1_valid <= 0;
     end
     else begin
         s1_valid <= pixel_valid;
-        s1_dx0 <= mag0_x - pixel_x;
-        s1_dy0 <= mag0_y - pixel_y;
-        s1_dx1 <= mag1_x - pixel_x;
-        s1_dy1 <= mag1_y - pixel_y;
-        s1_dx2 <= mag2_x - pixel_x;
-        s1_dy2 <= mag2_y - pixel_y;
+        s1_dx0 <= s1_dx0_w;
+        s1_dy0 <= s1_dy0_w;
+        s1_dx1 <= s1_dx1_w;
+        s1_dy1 <= s1_dy1_w;
+        s1_dx2 <= s1_dx2_w;
+        s1_dy2 <= s1_dy2_w;
         s1_x <= pixel_x;
         s1_y <= pixel_y;
         s1_vx <= pixel_vx;
@@ -134,6 +143,9 @@ end
 //========================================================================================
 //outputs
 logic signed [W-1:0] s3_q0, s3_q1, s3_q2;
+
+logic signed [W-1:0] s3_q0_w, s3_q1_w, s3_q2_w;
+
 logic signed [W-1:0] s3_dx0, s3_dy0, s3_dx1, s3_dy1, s3_dx2, s3_dy2;
 logic signed [W-1:0] s3_x, s3_y, s3_vx, s3_vy;
 logic [11:0] s3_step_cnt;
@@ -141,6 +153,10 @@ logic [14:0] s3_id;
 logic s3_valid;
 
 logic [1:0] s3_settle_count;
+
+fx_adder_s3 #(.W(W), .F(F)) s3_q0_adder (.a(s2_dx0_sq), .b(s2_dy0_sq), .c(h2), .d(s3_q0_w));
+fx_adder_s3 #(.W(W), .F(F)) s3_q1_adder (.a(s2_dx1_sq), .b(s2_dy1_sq), .c(h2), .d(s3_q1_w));
+fx_adder_s3 #(.W(W), .F(F)) s3_q2_adder (.a(s2_dx2_sq), .b(s2_dy2_sq), .c(h2), .d(s3_q2_w));
 
 always @(posedge clk) begin
     if (rst) begin
@@ -150,9 +166,12 @@ always @(posedge clk) begin
 
         //worried about potential overflow here - we would need to investigate if it actually saturates by looking at values
         //use q value as Q6.12. and truncate it on LUT address index
-        s3_q0 <= s2_dx0_sq + s2_dy0_sq + h2;
-        s3_q1 <= s2_dx1_sq + s2_dy1_sq + h2;
-        s3_q2 <= s2_dx2_sq + s2_dy2_sq + h2;
+
+        //UPDATE: added saturation to prevent overflow - don't think we need to make q wider
+        //TODO - we could potentially make q wider and not saturate?
+        s3_q0 <= s3_q0_w;
+        s3_q1 <= s3_q1_w;
+        s3_q2 <= s3_q2_w;
 
         //pass through values
         s3_valid <= s2_valid;
@@ -311,10 +330,8 @@ fx_mul #(.W(W), .F(F)) m_omega2_pos_x (.a(omega2), .b(s5_x), .c(omega2_pos_x_w))
 fx_mul #(.W(W), .F(F)) m_gamma_vel_y (.a(gamma), .b(s5_vy), .c(gamma_vel_y_w));
 fx_mul #(.W(W), .F(F)) m_omega2_pos_y (.a(omega2), .b(s5_y), .c(omega2_pos_y_w));
 
-always_comb begin
-    dx_invq_sum_w = s5_dx_invq0 + s5_dx_invq1 + s5_dx_invq2;
-    dy_invq_sum_w = s5_dy_invq0 + s5_dy_invq1 + s5_dy_invq2;
-end
+fx_adder_s3 #(.W(W), .F(F)) dx_invq_adder (.a(s5_dx_invq0), .b(s5_dx_invq1), .c(s5_dx_invq2), .d(dx_invq_sum_w));
+fx_adder_s3 #(.W(W), .F(F)) dy_invq_adder (.a(s5_dy_invq0), .b(s5_dy_invq1), .c(s5_dy_invq2), .d(dy_invq_sum_w));
 
 always @(posedge clk) begin
     if (rst) begin
@@ -366,11 +383,9 @@ logic signed [W-1:0] mu_dx_invq_w, mu_dy_invq_w;
 fx_mul #(.W(W), .F(F)) m_mu_dx_invq (.a(mu), .b(s6a_dx_invq_sum), .c(mu_dx_invq_w));
 fx_mul #(.W(W), .F(F)) m_mu_dy_invq (.a(mu), .b(s6a_dy_invq_sum), .c(mu_dy_invq_w));
 
-always_comb begin
-    // combine multiplier outputs into accelerations
-    s6b_ax_w = mu_dx_invq_w - s6a_gamma_vel_x - s6a_omega2_pos_x;
-    s6b_ay_w = mu_dy_invq_w - s6a_gamma_vel_y - s6a_omega2_pos_y;
-end
+fx_sub_three_input #(.W(W), .F(F)) s6b_ax_subtractor (.a(mu_dx_invq_w), .b(s6a_gamma_vel_x), .c(s6a_omega2_pos_x), .d(s6b_ax_w));
+fx_sub_three_input #(.W(W), .F(F)) s6b_ay_subtractor (.a(mu_dy_invq_w), .b(s6a_gamma_vel_y), .c(s6a_omega2_pos_y), .d(s6b_ay_w));
+
 
 always @(posedge clk) begin
     if (rst) begin
@@ -400,6 +415,7 @@ end
 //outputs
 
 logic signed [W-1:0] s7_x, s7_y, s7_vx, s7_vy;
+logic signed [W-1:0] s7_vx_w, s7_vy_w;
 logic [11:0] s7_step_cnt;
 logic [14:0] s7_id;
 logic s7_valid;
@@ -412,14 +428,17 @@ logic signed [W-1:0] dt_ax, dt_ay;
 fx_mul #(.W(W), .F(F)) m_dt_ax (.a(dt),.b(s6b_ax),.c(dt_ax));
 fx_mul #(.W(W), .F(F)) m_dt_ay (.a(dt),.b(s6b_ay),.c(dt_ay));
 
+fx_adder_two_input #(.W(W), .F(F)) s7_vx_adder (.a(s6b_vx), .b(dt_ax), .c(s7_vx_w));
+fx_adder_two_input #(.W(W), .F(F)) s7_vy_adder (.a(s6b_vy), .b(dt_ay), .c(s7_vy_w));
+
 always @(posedge clk) begin
     if (rst) begin
         s7_valid <= 0;
     end
     else begin
         //update velocity with dt_ax and dt_ay
-        s7_vx <= s6b_vx + dt_ax;
-        s7_vy <= s6b_vy + dt_ay;
+        s7_vx <= s7_vx_w;
+        s7_vy <= s7_vy_w;
 
         //pass through values
         s7_valid <= s6b_valid;
@@ -440,8 +459,13 @@ end
 //intermediate
 logic signed [W-1:0] dt_x, dt_y;
 
+logic signed [W-1:0] out_x_w, out_y_w;
+
 fx_mul #(.W(W), .F(F)) m_dt_x (.a(dt),.b(s7_vx),.c(dt_x));
 fx_mul #(.W(W), .F(F)) m_dt_y (.a(dt),.b(s7_vy),.c(dt_y));
+
+fx_adder_two_input #(.W(W), .F(F)) out_x_adder (.a(s7_x), .b(dt_x), .c(out_x_w));
+fx_adder_two_input #(.W(W), .F(F)) out_y_adder (.a(s7_y), .b(dt_y), .c(out_y_w));
 
 always @(posedge clk) begin
     if (rst) begin
@@ -449,8 +473,8 @@ always @(posedge clk) begin
     end
     else begin
         //update position with dt_x and dt_y
-        out_x <= s7_x + dt_x;
-        out_y <= s7_y + dt_y;
+        out_x <= out_x_w;
+        out_y <= out_y_w;
 
         //pass through values
         out_valid <= s7_valid;
