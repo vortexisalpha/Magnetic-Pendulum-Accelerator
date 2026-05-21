@@ -173,8 +173,20 @@ def damping_factor():
 
     return {"ok" : 200}
 
-@app.route('/height_of_pendulum')
-def height_of_pendulum():
+#change the pendulum height
+"""
+request must be of form:
+    {   
+        pendulum_height: float
+    }
+"""
+@app.route('/pendulum_height')
+def pendulum_height():
+    data = request.get_json()
+
+    pendulum_height = float(data["pendulum_height"])
+    mp_data.pendulum_height = pendulum_height 
+
     return {"ok" : 200}
 
 @app.route('/length_of_pendulum')
