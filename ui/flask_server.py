@@ -189,8 +189,20 @@ def pendulum_height():
 
     return {"ok" : 200}
 
-@app.route('/length_of_pendulum')
+#change the pendulum length
+"""
+request must be of form:
+    {   
+        pendulum_length: float
+    }
+"""
+@app.route('/pendulum_length')
 def length_of_pendulum():
+    data = request.get_json()
+
+    pendulum_length = float(data["pendulum_length"])
+    mp_data.pendulum_length = pendulum_length
+
     return {"ok" : 200}
 
 if __name__ == "__main__":
