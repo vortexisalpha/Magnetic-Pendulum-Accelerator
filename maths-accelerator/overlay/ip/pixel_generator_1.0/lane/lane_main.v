@@ -411,15 +411,15 @@ logic s6c_valid;
 
 logic [1:0] s6c_settle_count;
 
-logic signed [W-1:0] s6b_ax, s6b_ay;
-logic signed [W-1:0] s6b_ax_w, s6b_ay_w;
+logic signed [W-1:0] s6c_ax, s6c_ay;
+logic signed [W-1:0] s6c_ax_w, s6c_ay_w;
 
-fx_sub_three_input #(.W(W), .F(F)) s6b_ax_subtractor (.a(mu_dx_invq), .b(s6a_gamma_vel_x), .c(s6a_omega2_pos_x), .d(s6b_ax_w));
-fx_sub_three_input #(.W(W), .F(F)) s6b_ay_subtractor (.a(mu_dy_invq), .b(s6a_gamma_vel_y), .c(s6a_omega2_pos_y), .d(s6b_ay_w));
+fx_sub_three_input #(.W(W), .F(F)) s6c_ax_subtractor (.a(mu_dx_invq), .b(s6a_gamma_vel_x), .c(s6a_omega2_pos_x), .d(s6c_ax_w));
+fx_sub_three_input #(.W(W), .F(F)) s6c_ay_subtractor (.a(mu_dy_invq), .b(s6a_gamma_vel_y), .c(s6a_omega2_pos_y), .d(s6c_ay_w));
 
 always @(posedge clk) begin
     if (rst) begin
-        s6b_valid <= 0;
+        s6c_valid <= 0;
     end
     else begin
         //pass through values
@@ -433,8 +433,8 @@ always @(posedge clk) begin
         s6c_settle_count <= s6b_settle_count;
 
         //register ax and ay for pipeline alignment
-        s6c_ax <= s6b_ax_w;
-        s6c_ay <= s6b_ay_w;
+        s6c_ax <= s6c_ax_w;
+        s6c_ay <= s6c_ay_w;
     end
 end
 
@@ -455,11 +455,11 @@ logic [1:0] s7_settle_count;
 //intermediate
 logic signed [W-1:0] dt_ax, dt_ay;
 
-fx_mul #(.W(W), .F(F)) m_dt_ax (.a(dt),.b(s6b_ax),.c(dt_ax));
-fx_mul #(.W(W), .F(F)) m_dt_ay (.a(dt),.b(s6b_ay),.c(dt_ay));
+fx_mul #(.W(W), .F(F)) m_dt_ax (.a(dt),.b(s6c_ax),.c(dt_ax));
+fx_mul #(.W(W), .F(F)) m_dt_ay (.a(dt),.b(s6c_ay),.c(dt_ay));
 
-fx_adder_two_input #(.W(W), .F(F)) s7_vx_adder (.a(s6b_vx), .b(dt_ax), .c(s7_vx_w));
-fx_adder_two_input #(.W(W), .F(F)) s7_vy_adder (.a(s6b_vy), .b(dt_ay), .c(s7_vy_w));
+fx_adder_two_input #(.W(W), .F(F)) s7_vx_adder (.a(s6c_vx), .b(dt_ax), .c(s7_vx_w));
+fx_adder_two_input #(.W(W), .F(F)) s7_vy_adder (.a(s6c_vy), .b(dt_ay), .c(s7_vy_w));
 
 always @(posedge clk) begin
     if (rst) begin
@@ -471,13 +471,13 @@ always @(posedge clk) begin
         s7_vy <= s7_vy_w;
 
         //pass through values
-        s7_valid <= s6b_valid;
-        s7_x <= s6b_x;
-        s7_y <= s6b_y;
-        s7_step_cnt <= s6b_step_cnt;
-        s7_id <= s6b_id;
+        s7_valid <= s6c_valid;
+        s7_x <= s6c_x;
+        s7_y <= s6c_y;
+        s7_step_cnt <= s6c_step_cnt;
+        s7_id <= s6c_id;
 
-        s7_settle_count <= s6b_settle_count;
+        s7_settle_count <= s6c_settle_count;
     end
 end
 
