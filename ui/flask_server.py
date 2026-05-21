@@ -16,9 +16,10 @@ app = Flask(__name__)
 #individual magnet x, y
 @dataclass
 class Magnet:
+    uid: str 
     x: float 
     y: float 
-
+    
 #coordinates of the actual visualisation
 @dataclass
 class Grid:
@@ -62,6 +63,7 @@ def construct_mpdata_json(mp_data: MPData):
 
     return json.dumps(data)
 
+
 #ALL ENDPOINTS:
 
 #default ping for checking connection
@@ -75,45 +77,57 @@ def ping():
 def info():
     return construct_mpdata_json(mp_data)
 
-#magnet_add
+#add a magnet
 """
 request must be of form:
-    {
+    {   uid: str (note that this will be the type of arUco marker)
         x: float
         y: float
     }
 """
 @app.route('/magnet_add', methods=["POST"])
-def magnet_info():
+def magnet_add():
     data = request.get_json()
 
+    uid = data["uid"]
     x = float(data["x"])
     y = float(data["y"])
 
-    magnet = Magnet(x,y)
+    magnet = Magnet(uid, x, y)
     mp_data.mag_list.append(magnet)
 
     return {"ok" : 200}
 
+#remove a magnet
+"""
+request must be of form:
+    {
+        mag_number: 
+    }
+"""
+@app.route('/magnet_remove', methods=["POST"])
+def magnet_remove():
+    return {"ok" : 200}
+
 @app.route('/magnet_update_position')
-def magnet_position():
-    pass
+def magnet_update_position():
+    return {"ok" : 200}
 
 @app.route('/magnetic_strength')
 def magnetic_strength():
-    pass
+    return {"ok" : 200}
 
 @app.route('/damping_factor')
 def magnetic_density():
-    pass
+    return {"ok" : 200}
 
 @app.route('/height_of_pendulum')
 def height_of_pendulum():
-    pass
+    return {"ok" : 200}
 
 @app.route('/length_of_pendulum')
-def height_of_pendulum():
-    pass
+def length_of_pendulum():
+    return {"ok" : 200}
 
 if __name__ == "__main__":
     mp_data = MPData()
