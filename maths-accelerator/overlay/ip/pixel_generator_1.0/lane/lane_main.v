@@ -22,6 +22,8 @@ module lane_main #(
     input logic [11:0] pixel_step_cnt, //12 bits = 4096 steps max
     input logic [14:0] pixel_id, //15 bits = 32768 pixels max and therefore fits inside 160x120
 
+    //used to count how many times the pixel has 'settled'
+    input logic [1:0] settle_count,
 
     //========================================================================================
     //                  outputs
@@ -30,6 +32,8 @@ module lane_main #(
     output logic signed [W-1:0] out_x, out_y, out_vx, out_vy,
     output logic [11:0] out_step_cnt,
     output logic [14:0] out_id
+
+    output logic [1:0] out_settle_count
 );
 
 //========================================================================================
@@ -42,6 +46,8 @@ logic signed [W-1:0] s1_x, s1_y, s1_vx, s1_vy;
 logic [11:0] s1_step_cnt;
 logic [14:0] s1_id;
 logic s1_valid;
+
+logic [1:0] s1_settle_count;
 
 always @(posedge clk) begin
     if (rst) begin
@@ -61,6 +67,7 @@ always @(posedge clk) begin
         s1_vy <= pixel_vy;
         s1_step_cnt <= pixel_step_cnt;
         s1_id <= pixel_id;
+        s1_settle_count <= settle_count;
     end
 end
 
@@ -75,6 +82,8 @@ logic signed [W-1:0] s2_x, s2_y, s2_vx, s2_vy;
 logic [11:0] s2_step_cnt;
 logic [14:0] s2_id;
 logic s2_valid;
+
+logic [1:0] s2_settle_count;
 
 //combinatorial outputs for fx_mul modules
 logic signed [W-1:0] s2_dx0_sq_w, s2_dy0_sq_w, s2_dx1_sq_w, s2_dy1_sq_w, s2_dx2_sq_w, s2_dy2_sq_w;
@@ -106,7 +115,7 @@ always @(posedge clk) begin
         s2_vy <= s1_vy;
         s2_step_cnt <= s1_step_cnt;
         s2_id <= s1_id;
-
+        s2_settle_count <= s1_settle_count;
 
         //register squared outputs for pipline
         s2_dx0_sq <= s2_dx0_sq_w;
@@ -129,6 +138,8 @@ logic [11:0] s3_step_cnt;
 logic [14:0] s3_id;
 logic s3_valid;
 
+logic [1:0] s3_settle_count;
+
 always @(posedge clk) begin
     if (rst) begin
         s3_valid <= 0;
@@ -136,6 +147,7 @@ always @(posedge clk) begin
     else begin
 
         //worried about potential overflow here - we would need to investigate if it actually saturates by looking at values
+        //use q value as Q6.12. and truncate it on LUT address index
         s3_q0 <= s2_dx0_sq + s2_dy0_sq + h2;
         s3_q1 <= s2_dx1_sq + s2_dy1_sq + h2;
         s3_q2 <= s2_dx2_sq + s2_dy2_sq + h2;
@@ -154,6 +166,7 @@ always @(posedge clk) begin
         s3_vy <= s2_vy;
         s3_step_cnt <= s2_step_cnt;
         s3_id <= s2_id;
+        s3_settle_count <= s2_settle_count;
     end
 end
 
@@ -169,6 +182,8 @@ logic signed [W-1:0] s4_x, s4_y, s4_vx, s4_vy;
 logic [11:0] s4_step_cnt;
 logic [14:0] s4_id;
 logic s4_valid;
+
+logic [1:0] s4_settle_count;
 
 lut_bram #(.W(W), .F(F), .LUT_SIZE(LUT_SIZE), .LUT_ADDR_W(LUT_ADDR_W)) lut0 (
     .clk(clk),
@@ -210,6 +225,7 @@ always @(posedge clk) begin
         s4_vy <= s3_vy;
         s4_step_cnt <= s3_step_cnt;
         s4_id <= s3_id;
+        s4_settle_count <= s3_settle_count;
     end
 end
 
@@ -224,6 +240,8 @@ logic signed [W-1:0] s5_x, s5_y, s5_vx, s5_vy;
 logic [11:0] s5_step_cnt;
 logic [14:0] s5_id;
 logic s5_valid;
+
+logic [1:0] s5_settle_count;
 
 //intermediate combinatorial outputs for fx_mul modules
 logic signed [W-1:0] s5_dx_invq0_w, s5_dx_invq1_w, s5_dx_invq2_w;
@@ -257,6 +275,7 @@ always @(posedge clk) begin
         s5_dy_invq1 <= s5_dy_invq1_w;
         s5_dx_invq2 <= s5_dx_invq2_w;
         s5_dy_invq2 <= s5_dy_invq2_w;
+        s5_settle_count <= s4_settle_count;
     end
 end
 
@@ -271,6 +290,8 @@ logic signed [W-1:0] s6_x, s6_y, s6_vx, s6_vy;
 logic [11:0] s6_step_cnt;
 logic [14:0] s6_id;
 logic s6_valid;
+
+logic [1:0] s6_settle_count;
 
 //intermediate sums and combinatorial multiplier outputs
 logic signed [W-1:0] dx_invq_sum, dy_invq_sum;
@@ -311,6 +332,7 @@ always @(posedge clk) begin
         s6_vy <= s5_vy;
         s6_step_cnt <= s5_step_cnt;
         s6_id <= s5_id;
+        s6_settle_count <= s5_settle_count;
 
         //registers for alignment of combinatorial outputs
         s6_ax <= s6_ax_w;
@@ -328,6 +350,8 @@ logic signed [W-1:0] s7_x, s7_y, s7_vx, s7_vy;
 logic [11:0] s7_step_cnt;
 logic [14:0] s7_id;
 logic s7_valid;
+
+logic [1:0] s7_settle_count;
 
 //intermediate
 logic signed [W-1:0] dt_ax, dt_ay;
@@ -350,6 +374,8 @@ always @(posedge clk) begin
         s7_y <= s6_y;
         s7_step_cnt <= s6_step_cnt;
         s7_id <= s6_id;
+
+        s7_settle_count <= s6_settle_count;
     end
 end
 
@@ -379,6 +405,8 @@ always @(posedge clk) begin
         out_vy <= s7_vy;
         out_step_cnt <= s7_step_cnt+1;//increment step count
         out_id <= s7_id;
+
+        out_settle_count <= s7_settle_count;
     end
 end
 
