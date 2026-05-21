@@ -362,7 +362,7 @@ end
 
 
 //========================================================================================
-//            S6b: multiply gamma_vel, omega2x, sum all dy dx with qinv multiplied
+//            S6b: multiply dx/dy_invq_sum with mu
 //========================================================================================
 //outputs
 logic signed [W-1:0] s6b_x, s6b_y, s6b_vx, s6b_vy;
@@ -370,22 +370,14 @@ logic [11:0] s6b_step_cnt;
 logic [14:0] s6b_id;
 logic s6b_valid;
 
-logic signed [W-1:0] s6b_ax, s6b_ay;
-
-
 logic [1:0] s6b_settle_count;
 
-logic signed [W-1:0] s6b_ax_w;
-logic signed [W-1:0] s6b_ay_w;
+logic signed [W-1:0] mu_dx_invq, mu_dy_invq;
 logic signed [W-1:0] mu_dx_invq_w, mu_dy_invq_w;
 
 
 fx_mul #(.W(W), .F(F)) m_mu_dx_invq (.a(mu), .b(s6a_dx_invq_sum), .c(mu_dx_invq_w));
 fx_mul #(.W(W), .F(F)) m_mu_dy_invq (.a(mu), .b(s6a_dy_invq_sum), .c(mu_dy_invq_w));
-
-fx_sub_three_input #(.W(W), .F(F)) s6b_ax_subtractor (.a(mu_dx_invq_w), .b(s6a_gamma_vel_x), .c(s6a_omega2_pos_x), .d(s6b_ax_w));
-fx_sub_three_input #(.W(W), .F(F)) s6b_ay_subtractor (.a(mu_dy_invq_w), .b(s6a_gamma_vel_y), .c(s6a_omega2_pos_y), .d(s6b_ay_w));
-
 
 always @(posedge clk) begin
     if (rst) begin
@@ -403,8 +395,46 @@ always @(posedge clk) begin
         s6b_settle_count <= s6a_settle_count;
 
         //register ax and ay for pipeline alignment
-        s6b_ax <= s6b_ax_w;
-        s6b_ay <= s6b_ay_w;
+        mu_dx_invq <= mu_dx_invq_w;
+        mu_dy_invq <= mu_dy_invq_w;
+    end
+end
+
+//========================================================================================
+//            S6c: subtract mu_dx/dy_invq_w with gamma_vel and omega2_pos
+//========================================================================================
+//outputs
+logic signed [W-1:0] s6c_x, s6c_y, s6c_vx, s6c_vy;
+logic [11:0] s6c_step_cnt;
+logic [14:0] s6c_id;
+logic s6c_valid;
+
+logic [1:0] s6c_settle_count;
+
+logic signed [W-1:0] s6b_ax, s6b_ay;
+logic signed [W-1:0] s6b_ax_w, s6b_ay_w;
+
+fx_sub_three_input #(.W(W), .F(F)) s6b_ax_subtractor (.a(mu_dx_invq), .b(s6a_gamma_vel_x), .c(s6a_omega2_pos_x), .d(s6b_ax_w));
+fx_sub_three_input #(.W(W), .F(F)) s6b_ay_subtractor (.a(mu_dy_invq), .b(s6a_gamma_vel_y), .c(s6a_omega2_pos_y), .d(s6b_ay_w));
+
+always @(posedge clk) begin
+    if (rst) begin
+        s6b_valid <= 0;
+    end
+    else begin
+        //pass through values
+        s6c_valid <= s6b_valid;
+        s6c_x <= s6b_x;
+        s6c_y <= s6b_y;
+        s6c_vx <= s6b_vx;
+        s6c_vy <= s6b_vy;
+        s6c_step_cnt <= s6b_step_cnt;
+        s6c_id <= s6b_id;
+        s6c_settle_count <= s6b_settle_count;
+
+        //register ax and ay for pipeline alignment
+        s6c_ax <= s6b_ax_w;
+        s6c_ay <= s6b_ay_w;
     end
 end
 
