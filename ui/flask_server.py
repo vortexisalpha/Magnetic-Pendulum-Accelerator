@@ -21,10 +21,10 @@ class Magnet:
 #coordinates of the actual visualisation
 @dataclass
 class Grid:
-    x_min: float
-    x_max: float
-    y_min: float
-    y_max: float
+    x_min: float = 0
+    x_max: float = SCREEN_SIZE_X
+    y_min: float = 0
+    y_max: float = SCREEN_SIZE_Y
 
 #MPData stands for magnetic pendulum data
 @dataclass
