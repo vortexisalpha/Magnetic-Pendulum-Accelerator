@@ -8,6 +8,8 @@ module lane_main #(
     input rst,
     //========================================================================================
     //                  Physical paramater inputs
+    //========================================================================================
+
     input logic signed [W-1:0] mag0_x, mag0_y,
     input logic signed [W-1:0] mag1_x, mag1_y,
     input logic signed [W-1:0] mag2_x, mag2_y,
