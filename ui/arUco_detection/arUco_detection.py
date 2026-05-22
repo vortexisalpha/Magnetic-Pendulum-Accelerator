@@ -7,11 +7,12 @@ font = cv2.FONT_HERSHEY_PLAIN
 # create the dictionary for markers type
 dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
 
-# Read the image.
+# Read the image and converts it to grayscale for faster detection
 image = cv2.imread("./IMG_8940.jpg")
+gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
 # Detect ArUco markers in the image.
-corners, marker_ids, rejected = cv2.aruco.detectMarkers(image, dictionary)
+corners, marker_ids, rejected = cv2.aruco.detectMarkers(gray, dictionary)
 
 # If markers are detected, draw them on the image.
 if corners:
