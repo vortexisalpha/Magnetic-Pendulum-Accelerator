@@ -16,6 +16,9 @@ module lane_main #(
 
     input logic signed [W-1:0] gamma, omega2, h2, mu, dt,
 
+    //not signed as it's always positive
+    input logic [W-1:0] r_settle_sq, v_settle,
+
     //========================================================================================
     //                  pixel info
     //========================================================================================
@@ -34,6 +37,7 @@ module lane_main #(
     output logic signed [W-1:0] out_x, out_y, out_vx, out_vy,
     output logic [11:0] out_step_cnt,
     output logic [14:0] out_id,
+    output logic [1:0] out_magnet_id,
 
     output logic [1:0] out_settle_count
 );
@@ -141,10 +145,10 @@ end
 //========================================================================================
 //                  S3: q = dx^2 + dy^2 + h^2
 //========================================================================================
-//outputs
-logic signed [W-1:0] s3_q0, s3_q1, s3_q2;
+// outputs
+logic signed [W+1:0] s3_q0, s3_q1, s3_q2;
 
-logic signed [W-1:0] s3_q0_w, s3_q1_w, s3_q2_w;
+logic signed [W+1:0] s3_q0_w, s3_q1_w, s3_q2_w;
 
 logic signed [W-1:0] s3_dx0, s3_dy0, s3_dx1, s3_dy1, s3_dx2, s3_dy2;
 logic signed [W-1:0] s3_x, s3_y, s3_vx, s3_vy;
@@ -158,10 +162,49 @@ fx_adder_s3 #(.W(W), .F(F)) s3_q0_adder (.a(s2_dx0_sq), .b(s2_dy0_sq), .c(h2), .
 fx_adder_s3 #(.W(W), .F(F)) s3_q1_adder (.a(s2_dx1_sq), .b(s2_dy1_sq), .c(h2), .d(s3_q1_w));
 fx_adder_s3 #(.W(W), .F(F)) s3_q2_adder (.a(s2_dx2_sq), .b(s2_dy2_sq), .c(h2), .d(s3_q2_w));
 
-always @(posedge clk) begin
+// new declarations
+// also need input declarations of r_settle, v_settle,
+logic [1:0] s3_magnet_id;
+
+
+//settle count declarations
+logic [W-1:0] s3_d0, s3_d1, s3_d2;
+fx_adder_two_input #(.W(W), .F(F)) s3_d0_adder (.a(s2_dx0_sq), .b(s2_dy0_sq), .c(s3_d0));
+fx_adder_two_input #(.W(W), .F(F)) s3_d1_adder (.a(s2_dx1_sq), .b(s2_dy1_sq), .c(s3_d1));
+fx_adder_two_input #(.W(W), .F(F)) s3_d2_adder (.a(s2_dx2_sq), .b(s2_dy2_sq), .c(s3_d2));
+
+logic [W-1:0] abs_vx, abs_vy;
+logic [1:0] nearest_id;
+logic [W-1:0] min_d;
+
+
+assign abs_vx = s2_vx[W-1] ? -s2_vx : s2_vx;
+assign abs_vy = s2_vy[W-1] ? -s2_vy : s2_vy;
+
+// ties are handled by priority
+always_comb begin
+    if ((s3_d0 <= s3_d1) && (s3_d0 <= s3_d2)) begin
+        nearest_id = 2'd0;
+        min_d = s3_d0;
+    end 
+    else if (s3_d1 <= s3_d2) begin
+        nearest_id = 2'd1;
+        min_d = s3_d1;
+    end 
+    else begin
+        nearest_id = 2'd2;  
+        min_d = s3_d2;
+    end
+end
+
+
+always_ff @(posedge clk) begin
     if (rst) begin
         s3_valid <= 0;
+        s3_settle_count <= 2'd0;
+        s3_magnet_id <= 2'd0;
     end
+    
     else begin
 
         //worried about potential overflow here - we would need to investigate if it actually saturates by looking at values
@@ -169,6 +212,7 @@ always @(posedge clk) begin
 
         //UPDATE: added saturation to prevent overflow - don't think we need to make q wider
         //TODO - we could potentially make q wider and not saturate?
+
         s3_q0 <= s3_q0_w;
         s3_q1 <= s3_q1_w;
         s3_q2 <= s3_q2_w;
@@ -187,9 +231,25 @@ always @(posedge clk) begin
         s3_vy <= s2_vy;
         s3_step_cnt <= s2_step_cnt;
         s3_id <= s2_id;
-        s3_settle_count <= s2_settle_count;
+        
+        // use r_settle squared
+        if (s2_valid) begin 
+            if ((min_d < r_settle_sq) && (abs_vx < v_settle) && (abs_vy < v_settle)) begin
+                s3_settle_count <= (s2_settle_count != 2'd3) ? s2_settle_count + 2'd1 : 2'd3;
+                s3_magnet_id <= nearest_id;
+            end
+            else begin
+                s3_settle_count <= 2'd0;
+                s3_magnet_id <= 2'd0;
+            end
+        end
+        else begin
+            s3_settle_count <= 2'd0;
+            s3_magnet_id <= 2'd0;
+        end
     end
 end
+
 
 
 //========================================================================================
@@ -203,6 +263,8 @@ logic signed [W-1:0] s4_x, s4_y, s4_vx, s4_vy;
 logic [11:0] s4_step_cnt;
 logic [14:0] s4_id;
 logic s4_valid;
+
+logic [1:0] s4_magnet_id;
 
 logic [1:0] s4_settle_count;
 
@@ -247,6 +309,7 @@ always @(posedge clk) begin
         s4_step_cnt <= s3_step_cnt;
         s4_id <= s3_id;
         s4_settle_count <= s3_settle_count;
+        s4_magnet_id <= s3_magnet_id;
     end
 end
 
@@ -261,6 +324,7 @@ logic signed [W-1:0] s5_x, s5_y, s5_vx, s5_vy;
 logic [11:0] s5_step_cnt;
 logic [14:0] s5_id;
 logic s5_valid;
+logic [1:0] s5_magnet_id;
 
 logic [1:0] s5_settle_count;
 
@@ -297,6 +361,7 @@ always @(posedge clk) begin
         s5_dx_invq2 <= s5_dx_invq2_w;
         s5_dy_invq2 <= s5_dy_invq2_w;
         s5_settle_count <= s4_settle_count;
+        s5_magnet_id <= s4_magnet_id;
     end
 end
 
@@ -309,6 +374,7 @@ logic signed [W-1:0] s6a_x, s6a_y, s6a_vx, s6a_vy;
 logic [11:0] s6a_step_cnt;
 logic [14:0] s6a_id;
 logic s6a_valid;
+logic [1:0] s6a_magnet_id;
 
 logic [1:0] s6a_settle_count;
 
@@ -330,8 +396,8 @@ fx_mul #(.W(W), .F(F)) m_omega2_pos_x (.a(omega2), .b(s5_x), .c(omega2_pos_x_w))
 fx_mul #(.W(W), .F(F)) m_gamma_vel_y (.a(gamma), .b(s5_vy), .c(gamma_vel_y_w));
 fx_mul #(.W(W), .F(F)) m_omega2_pos_y (.a(omega2), .b(s5_y), .c(omega2_pos_y_w));
 
-fx_adder_s3 #(.W(W), .F(F)) dx_invq_adder (.a(s5_dx_invq0), .b(s5_dx_invq1), .c(s5_dx_invq2), .d(dx_invq_sum_w));
-fx_adder_s3 #(.W(W), .F(F)) dy_invq_adder (.a(s5_dy_invq0), .b(s5_dy_invq1), .c(s5_dy_invq2), .d(dy_invq_sum_w));
+fx_adder_s6 #(.W(W), .F(F)) dx_invq_adder (.a(s5_dx_invq0), .b(s5_dx_invq1), .c(s5_dx_invq2), .d(dx_invq_sum_w));
+fx_adder_s6 #(.W(W), .F(F)) dy_invq_adder (.a(s5_dy_invq0), .b(s5_dy_invq1), .c(s5_dy_invq2), .d(dy_invq_sum_w));
 
 always @(posedge clk) begin
     if (rst) begin
@@ -347,7 +413,7 @@ always @(posedge clk) begin
         s6a_step_cnt <= s5_step_cnt;
         s6a_id <= s5_id;
         s6a_settle_count <= s5_settle_count;
-
+        s6a_magnet_id <= s5_magnet_id;
         //registers for alignment of combinatorial outputs
         s6a_dx_invq_sum <= dx_invq_sum_w;
         s6a_dy_invq_sum <= dy_invq_sum_w;
@@ -371,6 +437,7 @@ logic [14:0] s6b_id;
 logic s6b_valid;
 
 logic [1:0] s6b_settle_count;
+logic [1:0] s6b_magnet_id;
 
 logic signed [W-1:0] mu_dx_invq, mu_dy_invq;
 logic signed [W-1:0] mu_dx_invq_w, mu_dy_invq_w;
@@ -396,6 +463,7 @@ always @(posedge clk) begin
         s6b_step_cnt <= s6a_step_cnt;
         s6b_id <= s6a_id;
         s6b_settle_count <= s6a_settle_count;
+        s6b_magnet_id <= s6a_magnet_id;
 
         s6b_gamma_vel_x <= s6a_gamma_vel_x;
         s6b_omega2_pos_x <= s6a_omega2_pos_x;
@@ -416,6 +484,7 @@ logic signed [W-1:0] s6c_x, s6c_y, s6c_vx, s6c_vy;
 logic [11:0] s6c_step_cnt;
 logic [14:0] s6c_id;
 logic s6c_valid;
+logic [1:0] s6c_magnet_id;
 
 logic [1:0] s6c_settle_count;
 
@@ -439,6 +508,7 @@ always @(posedge clk) begin
         s6c_step_cnt <= s6b_step_cnt;
         s6c_id <= s6b_id;
         s6c_settle_count <= s6b_settle_count;
+        s6c_magnet_id <= s6b_magnet_id;
 
         //register ax and ay for pipeline alignment
         s6c_ax <= s6c_ax_w;
@@ -456,6 +526,7 @@ logic signed [W-1:0] s7a_x, s7a_y, s7a_vx, s7a_vy;
 logic [11:0] s7a_step_cnt;
 logic [14:0] s7a_id;
 logic s7a_valid;
+logic [1:0] s7a_magnet_id;
 
 logic [1:0] s7a_settle_count;
 
@@ -484,6 +555,7 @@ always @(posedge clk) begin
         s7a_step_cnt <= s6c_step_cnt;
         s7a_id <= s6c_id;
 
+        s7a_magnet_id <= s6c_magnet_id;
         s7a_settle_count <= s6c_settle_count;
     end
 end
@@ -497,6 +569,7 @@ logic signed [W-1:0] s7b_x, s7b_y, s7b_vx, s7b_vy;
 logic [11:0] s7b_step_cnt;
 logic [14:0] s7b_id;
 logic s7b_valid;
+logic [1:0] s7b_magnet_id;
 
 logic [1:0] s7b_settle_count;
 
@@ -520,6 +593,7 @@ always @(posedge clk) begin
         s7b_y <= s7a_y;
         s7b_step_cnt <= s7a_step_cnt;
         s7b_id <= s7a_id;
+        s7b_magnet_id <= s7a_magnet_id;
 
         s7b_settle_count <= s7a_settle_count;
     end
@@ -535,6 +609,7 @@ logic [11:0] s8a_step_cnt;
 logic [14:0] s8a_id;
 logic s8a_valid;
 logic [1:0] s8a_settle_count;
+logic [1:0] s8a_magnet_id;
 
 logic signed [W-1:0] s8a_dt_x, s8a_dt_y;
 logic signed [W-1:0] s8a_dt_x_w, s8a_dt_y_w;
@@ -559,6 +634,7 @@ always @(posedge clk) begin
 
         s8a_x <= s7b_x;
         s8a_y <= s7b_y;
+        s8a_magnet_id <= s7b_magnet_id;
 
         s8a_settle_count <= s7b_settle_count;
     end
@@ -589,6 +665,7 @@ always @(posedge clk) begin
         out_vy <= s8a_vy;
         out_step_cnt <= s8a_step_cnt+1;//increment step count
         out_id <= s8a_id;
+        out_magnet_id <= s8a_magnet_id;
 
         out_settle_count <= s8a_settle_count;
     end

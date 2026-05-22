@@ -6,7 +6,7 @@ module lut_bram #(
 )(
     input clk,
     input rst,
-    input logic signed [W-1:0] addr,
+    input logic signed [W+1:0] addr,
     output logic signed [W-1:0] data_out
 );
     
@@ -22,10 +22,10 @@ module lut_bram #(
     // but this uses 2 DSPS - check accuracy
     
     logic [LUT_ADDR_W-1:0] idx;
-    
 
-    //index = q*128
-    assign idx = addr[LUT_ADDR_W+4:5];
+    // index = q_raw >> 5 = q * 128, clamped to 1023
+    //use a bunch of ors here
+    assign idx = (|addr[W+1:LUT_ADDR_W+5]) ? {LUT_ADDR_W{1'b1}} : addr[LUT_ADDR_W+4:5];
     
     always @(posedge clk) begin
         //synchronous read
