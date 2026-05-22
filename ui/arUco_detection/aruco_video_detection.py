@@ -7,7 +7,8 @@ _TEXT_FONT = cv2.FONT_HERSHEY_PLAIN
 
 
 def annotate_markers(frame: np.ndarray, dictionary: cv2.aruco.Dictionary) -> np.ndarray:
-    corners, marker_ids, _ = cv2.aruco.detectMarkers(frame, dictionary)
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    corners, marker_ids, _ = cv2.aruco.detectMarkers(gray, dictionary)
 
     # No markers detected — nothing to draw.
     if not corners:
