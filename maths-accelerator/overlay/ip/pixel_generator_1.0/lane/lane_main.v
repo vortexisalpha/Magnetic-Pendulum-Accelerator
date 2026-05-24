@@ -6,31 +6,33 @@ module lane_main #(
 )(
     input clk,
     input rst,
+    //========================================================================================
+    //                  Physical paramater inputs
+    //========================================================================================
 
-    
-    // Physical paramater inputs
     input logic signed [W-1:0] mag0_x, mag0_y,
     input logic signed [W-1:0] mag1_x, mag1_y,
     input logic signed [W-1:0] mag2_x, mag2_y,
 
     input logic signed [W-1:0] gamma, omega2, h2, mu, dt,
 
-    // Not signed as it's always positive
+    //not signed as it's always positive
     input logic [W-1:0] r_settle_sq, v_settle,
 
-
-
-    // Pixel info
+    //========================================================================================
+    //                  pixel info
+    //========================================================================================
     input logic pixel_valid,
     input logic signed [W-1:0] pixel_x, pixel_y, pixel_vx, pixel_vy,
     input logic [11:0] pixel_step_cnt, //12 bits = 4096 steps max
     input logic [14:0] pixel_id, //15 bits = 32768 pixels max and therefore fits inside 160x120
 
-    // Used to count how many times the pixel has 'settled'
+    //used to count how many times the pixel has 'settled'
     input logic [1:0] settle_count,
 
-    
-    // Outputs
+    //========================================================================================
+    //                  outputs
+    //========================================================================================
     output logic out_valid,
     output logic signed [W-1:0] out_x, out_y, out_vx, out_vy,
     output logic [11:0] out_step_cnt,
@@ -40,10 +42,11 @@ module lane_main #(
     output logic [1:0] out_settle_count
 );
 
-    
-// S1: compute dx and dy (0 dsps)
+//========================================================================================
+//                  S1: compute dx and dy (0 dsps)
+//========================================================================================
 
-// Outputs:
+//outputs:
 logic signed [W-1:0] s1_dx0, s1_dy0, s1_dx1, s1_dy1, s1_dx2, s1_dy2;
 logic signed [W-1:0] s1_dx0_w, s1_dy0_w, s1_dx1_w, s1_dy1_w, s1_dx2_w, s1_dy2_w;
 logic signed [W-1:0] s1_x, s1_y, s1_vx, s1_vy;
