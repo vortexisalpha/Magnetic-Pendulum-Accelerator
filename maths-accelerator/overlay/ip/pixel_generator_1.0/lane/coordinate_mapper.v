@@ -5,7 +5,8 @@ module coordinate_mapper #(
     parameter F = 12,
 
     parameter P_W = $clog2(IMG_W),
-    parameter Q_W = $clog2(IMG_H)
+    parameter Q_W = $clog2(IMG_H),
+    parameter PIXEL_ID_W = $clog2(IMG_W * IMG_H)
 )(
     input  logic  clk,
     input  logic  rst,
@@ -19,12 +20,15 @@ module coordinate_mapper #(
 
     input  logic [P_W-1:0]  p,
     input  logic [Q_W-1:0]  q,
+    input  logic [PIXEL_ID_W-1:0]  pixel_id,
+
 
     output logic  valid_out,
     output logic signed [W-1:0]  x0,
     output logic signed [W-1:0]  y0,
     output logic init_step_cnt,
-    output logic init_settle_cnt
+    output logic init_settle_cnt,
+    output logic [PIXEL_ID_W-1:0]  pixel_id_out
 );
 
     // p and q are unsigned pixel indices.
@@ -61,6 +65,7 @@ module coordinate_mapper #(
                 y0 <= y_min + q_offset_q;
                 init_step_cnt <= 1'b0;
                 init_settle_cnt <= 1'b0;
+                pixel_id_out <= pixel_id;
             end
         end
     end
