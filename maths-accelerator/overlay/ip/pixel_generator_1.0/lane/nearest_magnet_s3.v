@@ -8,9 +8,9 @@ module nearest_magnet_s3 #(
     input  logic in_valid,
 
     // Squared distances containing h^2 from Stage 3a
-    input  logic signed [Q_WIDTH-1:0] q0,
-    input  logic signed [Q_WIDTH-1:0] q1,
-    input  logic signed [Q_WIDTH-1:0] q2,
+    input  logic [Q_WIDTH-1:0] q0,
+    input  logic [Q_WIDTH-1:0] q1,
+    input  logic [Q_WIDTH-1:0] q2,
 
     input  logic signed [W-1:0]       in_dx0, in_dy0, in_dx1, in_dy1, in_dx2, in_dy2,
     input  logic signed [W-1:0]       in_x, in_y,
@@ -22,7 +22,7 @@ module nearest_magnet_s3 #(
     // Outputs
     output logic                      out_valid,
     output logic [1:0]                nearest_magnet_id,
-    output logic signed [Q_WIDTH-1:0] min_q,
+    output logic [Q_WIDTH-1:0] min_q,
 
     output logic signed [W-1:0]       out_dx0, out_dy0, out_dx1, out_dy1, out_dx2, out_dy2,
     output logic signed [W-1:0]       out_x, out_y,
@@ -31,9 +31,9 @@ module nearest_magnet_s3 #(
     output logic [14:0]               out_id,
     output logic [1:0]                out_settle_count,
 
-    output  logic signed [Q_WIDTH-1:0] out_q0,
-    output  logic signed [Q_WIDTH-1:0] out_q1,
-    output  logic signed [Q_WIDTH-1:0] out_q2
+    output  logic [Q_WIDTH-1:0] out_q0,
+    output  logic [Q_WIDTH-1:0] out_q1,
+    output  logic [Q_WIDTH-1:0] out_q2
 );
 
     // ── registered outputs ────────────────────────────────────────────────────

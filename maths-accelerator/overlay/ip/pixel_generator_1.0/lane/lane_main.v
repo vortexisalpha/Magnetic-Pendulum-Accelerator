@@ -23,7 +23,7 @@ module lane_main #(
     
     // new declarations
     // also need input declarations of r_settle_sq_h2_sum, v_settle,
-    input logic signed [Q_WIDTH-1:0] sum_r_settle_sq_h_sq,
+    input logic [Q_WIDTH-1:0] sum_r_settle_sq_h_sq,
 
     //========================================================================================
     //                  pixel info
@@ -155,9 +155,9 @@ end
 // outputs
 
 
-logic signed [Q_WIDTH-1:0] s3a_q0, s3a_q1, s3a_q2;
+logic [Q_WIDTH-1:0] s3a_q0, s3a_q1, s3a_q2;
 
-logic signed [Q_WIDTH-1:0] s3a_q0_w, s3a_q1_w, s3a_q2_w;
+logic [Q_WIDTH-1:0] s3a_q0_w, s3a_q1_w, s3a_q2_w;
 
 logic signed [W-1:0] s3a_dx0, s3a_dy0, s3a_dx1, s3a_dy1, s3a_dx2, s3a_dy2;
 
@@ -209,7 +209,7 @@ end
 // outputs
 logic                       s3b_valid;
 logic [1:0]                 s3b_nearest_magnet_id;
-logic signed [Q_WIDTH-1:0]  s3b_min_q;
+logic [Q_WIDTH-1:0]  s3b_min_q;
 
 logic signed [W-1:0] s3b_dx0, s3b_dy0, s3b_dx1, s3b_dy1, s3b_dx2, s3b_dy2;
 logic signed [W-1:0] s3b_x, s3b_y, s3b_vx, s3b_vy;
@@ -286,7 +286,7 @@ logic [14:0]                s3c_id;
 logic [1:0]                 s3c_nearest_magnet_id;
 logic [1:0]                 s3c_settle_count;
 
-logic [Q_WIDTH-1:0]        s3c_q0, s3c_q1, s3c_q2; 
+logic [Q_WIDTH-1:0] s3c_q0, s3c_q1, s3c_q2;
 
 settle_check_s3 #(
     .W(W),

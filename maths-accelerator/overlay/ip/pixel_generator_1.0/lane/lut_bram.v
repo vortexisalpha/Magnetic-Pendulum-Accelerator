@@ -6,7 +6,7 @@ module lut_bram #(
 )(
     input clk,
     input rst,
-    input logic signed [W+1:0] addr,
+    input logic [W+1:0] addr,
     output logic signed [W-1:0] data_out
 );
     

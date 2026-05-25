@@ -15,17 +15,15 @@ module settle_check_s3 #(
     input  logic [1:0]                in_settle_count,
 
     input  logic [1:0]                in_nearest_magnet_id,
-    input  logic signed [Q_WIDTH-1:0]        min_q,
+    input  logic [Q_WIDTH-1:0]        min_q,
 
-    input  logic signed [Q_WIDTH-1:0]        sum_r_settle_sq_h_sq, // r_settle^2 + h^2
-    // also writing this signed here because q values were written as signed values, for consistency, this is also written as signed, same as min_q
-    // might be best to write all squared and abs values as unsigned later
+    input  logic [Q_WIDTH-1:0]        sum_r_settle_sq_h_sq, // r_settle^2 + h^2
 
     input  logic [W-1:0]       v_settle,
 
-    input  logic signed [Q_WIDTH-1:0] in_q0,
-    input  logic signed [Q_WIDTH-1:0] in_q1,
-    input  logic signed [Q_WIDTH-1:0] in_q2,
+    input  logic [Q_WIDTH-1:0] in_q0,
+    input  logic [Q_WIDTH-1:0] in_q1,
+    input  logic [Q_WIDTH-1:0] in_q2,
 
     // Outputs
     output logic                      out_valid,
@@ -37,9 +35,9 @@ module settle_check_s3 #(
     output logic [1:0]                out_nearest_magnet_id,
     output logic [1:0]                out_settle_count,
 
-    output  logic signed [Q_WIDTH-1:0] out_q0,
-    output  logic signed [Q_WIDTH-1:0] out_q1,
-    output  logic signed [Q_WIDTH-1:0] out_q2
+    output  logic [Q_WIDTH-1:0] out_q0,
+    output  logic [Q_WIDTH-1:0] out_q1,
+    output  logic [Q_WIDTH-1:0] out_q2
 );
 
     logic [W-1:0]        abs_vx, abs_vy;
