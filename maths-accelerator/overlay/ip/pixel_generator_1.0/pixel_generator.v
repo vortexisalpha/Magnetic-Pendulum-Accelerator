@@ -60,7 +60,7 @@ input           s_axi_lite_wvalid
 
 localparam X_SIZE = 640;
 localparam Y_SIZE = 480;
-parameter  REG_FILE_SIZE = 16; // edited to account for 16 regs 
+parameter  REG_FILE_SIZE = 32; 
 localparam REG_FILE_AWIDTH = $clog2(REG_FILE_SIZE);
 parameter  AXI_LITE_ADDR_WIDTH = 8;
 
@@ -200,6 +200,7 @@ wire lastx = (x == X_SIZE - 1);
 wire lasty = (y == Y_SIZE - 1);
 wire [7:0] frame = regfile[0];
 wire ready;
+wire [7:0] r, g, b;
 
 always @(posedge out_stream_aclk) begin
     if (periph_resetn) begin
@@ -264,12 +265,6 @@ coordinate_mapper #(
     .y0    (y0)
 );
 
-// Placeholder colours until lane_main is wired in
-// x0, y0 feed into lane_main next
-wire [7:0] r = x0[11:4];       // middle bits give visible gradient
-wire [7:0] g = y0[11:4];
-wire [7:0] b = 8'hFF;
-
 packer pixel_packer(    .aclk(out_stream_aclk),
                         .aresetn(periph_resetn),
                         .r(r), .g(g), .b(b),
@@ -278,5 +273,59 @@ packer pixel_packer(    .aclk(out_stream_aclk),
                         .out_stream_tlast(out_stream_tlast), .out_stream_tready(out_stream_tready),
                         .out_stream_tvalid(out_stream_tvalid), .out_stream_tuser(out_stream_tuser) );
 
+// Frame buffer read address: py*160 + px, computed via shifts to avoid multiplier
+wire [14:0] fb_rd_addr = ({8'b0, py} << 7) + ({8'b0, py} << 5) + {7'b0, px};
+
+// Register map (all Q4.12 fixed-point unless noted):
+//  [0]  control
+//  [1]  x_min       [2]  y_min       [3]  x_step      [4]  y_step
+//  [5]  mag0_x      [6]  mag0_y
+//  [7]  mag1_x      [8]  mag1_y
+//  [9]  mag2_x      [10] mag2_y
+//  [11] gamma       [12] omega2      [13] h2           [14] mu         [15] dt
+//  [16] r_settle_sq [17] v_settle    [18] sum_r_settle_sq_h_sq [18:0]
+//  [19] {consec_settle_count[13:12], max_steps[11:0]}
+
+one_lane_top #(
+    .W(16), .F(12),
+    .LUT_SIZE(1024), .LUT_ADDR_W(10),
+    .Q_WIDTH(18),
+    .IMG_W(160), .IMG_H(120)
+) u_one_lane_top (
+    .clk    (out_stream_aclk),
+    .rst    (!periph_resetn),
+
+    .x_min  (regfile[1][15:0]),
+    .y_min  (regfile[2][15:0]),
+    .x_step (regfile[3][15:0]),
+    .y_step (regfile[4][15:0]),
+
+    .mag0_x (regfile[5][15:0]),
+    .mag0_y (regfile[6][15:0]),
+    .mag1_x (regfile[7][15:0]),
+    .mag1_y (regfile[8][15:0]),
+    .mag2_x (regfile[9][15:0]),
+    .mag2_y (regfile[10][15:0]),
+
+    .gamma  (regfile[11][15:0]),
+    .omega2 (regfile[12][15:0]),
+    .h2     (regfile[13][15:0]),
+    .mu     (regfile[14][15:0]),
+    .dt     (regfile[15][15:0]),
+
+    .r_settle_sq          (regfile[16][15:0]),
+    .v_settle             (regfile[17][15:0]),
+    .sum_r_settle_sq_h_sq (regfile[18][17:0]),
+    .consec_settle_count  (regfile[19][13:12]),
+    .max_steps            (regfile[19][11:0]),
+
+    .fb_rd_addr  (fb_rd_addr),
+    .active_video(valid_int),
+    .red  (r),
+    .green(g),
+    .blue (b)
+);
+
  
 endmodule
+
