@@ -4,7 +4,7 @@ module tb_settle_check_s3;
 
     localparam int W       = 16;
     localparam int F       = 12;
-    localparam int Q_WIDTH = 19;
+    localparam int Q_WIDTH = 18;
 
     // Change this if settle_check_s3 has more than 1 registered stage
     localparam int DUT_LATENCY = 1;

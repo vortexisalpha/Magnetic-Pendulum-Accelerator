@@ -1,7 +1,7 @@
 module nearest_magnet_s3 #(
     parameter W = 16,
     parameter F = 12,
-    parameter Q_WIDTH = 19
+    parameter Q_WIDTH = 18
 )(
     input  logic clk,
     input  logic rst,

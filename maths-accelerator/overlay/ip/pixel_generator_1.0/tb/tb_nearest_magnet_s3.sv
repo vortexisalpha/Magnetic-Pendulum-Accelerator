@@ -4,7 +4,7 @@ module tb_nearest_magnet_s3;
 
     localparam int W       = 16;
     localparam int F       = 12;
-    localparam int Q_WIDTH = 19;
+    localparam int Q_WIDTH = 18;
 
     // nearest_magnet_s3 is one registered pipeline stage
     localparam int DUT_LATENCY = 1;
