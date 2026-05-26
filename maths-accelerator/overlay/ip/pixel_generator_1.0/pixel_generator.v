@@ -243,27 +243,6 @@ always @(posedge out_stream_aclk) begin
     end
 end
 
-// Coordinate mapper: pixel (x,y) → physical (x0,y0)
-// regfile[1..4] hold viewport bounds as Q4.12 values
-// regfile[0] kept as frame/control register
-
-wire signed [15:0] x0, y0;
-
-coordinate_mapper #(
-    .IMG_W (160),
-    .IMG_H (120),
-    .W     (16),
-    .F     (12)
-) u_coord_mapper (
-    .x_min (regfile[1][15:0]),
-    .x_max (regfile[2][15:0]),
-    .y_min (regfile[3][15:0]),
-    .y_max (regfile[4][15:0]),
-    .p     (px),            // raster x: 0..159
-    .q     (py),            // raster y: 0..119
-    .x0    (x0),
-    .y0    (y0)
-);
 
 packer pixel_packer(    .aclk(out_stream_aclk),
                         .aresetn(periph_resetn),
