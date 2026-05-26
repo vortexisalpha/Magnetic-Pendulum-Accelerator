@@ -5,19 +5,19 @@ public class SliderTextDisplay : MonoBehaviour
 {
     [SerializeField] private TextMeshProUGUI sliderVal = null;
     [SerializeField] private TextMeshProUGUI paramName = null;
-    [SerializeField] private float param_min, param_max;
+    [SerializeField] private float paramMin, paramMax;
     [SerializeField] private string param;
 
-    public float displayValue { get ; private set ; }
+    public float displayValue { get; private set; }
 
     void Start()
     {
-        sliderVal.text = param_min.ToString("0.00");
+        sliderVal.text = paramMin.ToString("0.00");
         paramName.text = param;
     }
-    public void ValChange(float value)
+    public void valChange(float value)
     {
-        displayValue = param_min + (param_max - param_min) * value;
+        displayValue = paramMin + (paramMax - paramMin) * value;
         sliderVal.text = displayValue.ToString("0.00");
     }
 
