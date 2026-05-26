@@ -35,6 +35,7 @@ public class FlaskManager : MonoBehaviour
     //on start, establish url and coroutine (async function)
     void Start()
     {
+        Debug.Log("FlaskManager.Start running");
         URL = "http://127.0.0.1:5000/" + endpoint;
 
         dampingSlider = dampingFactorController.GetComponent<SliderTextDisplay>();
@@ -47,9 +48,13 @@ public class FlaskManager : MonoBehaviour
 
     private IEnumerator postLoop() 
     {
+        Debug.Log("postLoop started, URL=" + URL);
         while (true) 
         {
             string json = compileJson();
+
+            Debug.Log("POSTing: " + json);
+
             yield return PostJson(json);
 
             yield return new WaitForSeconds(postInterval);
