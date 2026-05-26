@@ -6,8 +6,6 @@
 # See: https://github.com/github/gitignore/tree/main/Global
 #
 
-# Extra line: Ignoring Unity project as well for now due to large project size
-Quick_mafs_UI_v1/
 
 
 .utmp/
