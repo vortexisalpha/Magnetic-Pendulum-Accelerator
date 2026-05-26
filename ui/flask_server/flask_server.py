@@ -161,5 +161,21 @@ def length_of_pendulum():
     return {"ok": 200}
 
 
+@app.route("/controller_data", methods=["POST"])
+def controller_data():
+    body = request.get_json()
+    mp_data.damping_factor = float(body["dampingFactor"])
+    mp_data.magnetic_strength = float(body["magneticStrength"])
+    mp_data.pendulum_length = float(body["pendulumLength"])
+    mp_data.pendulum_height = float(body["pendulumHeight"])
+
+    print(f"set damping_factor to {mp_data.damping_factor}")
+    print(f"set magnetic_strength to {mp_data.magnetic_strength}")
+    print(f"set pendulum_length to {mp_data.pendulum_length}")
+    print(f"set pendulum_height to {mp_data.pendulum_height}")
+    print(f"set magnetic_strength to {mp_data.magnetic_strength}")
+
+    return {"ok": 200}
+
 if __name__ == "__main__":
     app.run()
