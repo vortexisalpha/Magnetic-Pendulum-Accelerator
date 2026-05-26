@@ -25,6 +25,9 @@ class Grid:
     y_max: float = SCREEN_SIZE_Y
 
 
+def default_image() -> list[list[int]]:
+    return [[0 for _ in range(SCREEN_SIZE_X)]  for _ in range(SCREEN_SIZE_Y)] 
+
 @dataclass
 class MPData:
     mag_list: list[Magnet] = field(default_factory=list)
@@ -33,6 +36,7 @@ class MPData:
     damping_factor: float = 1
     pendulum_height: float = 1
     pendulum_length: float = 1
+    image: list[list[int]] = field(default_factory=default_image)
 
 
 mp_data = MPData()
@@ -127,6 +131,7 @@ def magnet_update_position():
 @app.route("/controller_data", methods=["POST"])
 def controller_data():
     body = request.get_json()
+
     mp_data.damping_factor = float(body["dampingFactor"])
     mp_data.magnetic_strength = float(body["magneticStrength"])
     mp_data.pendulum_length = float(body["pendulumLength"])
@@ -139,6 +144,25 @@ def controller_data():
     print(f"set magnetic_strength to {mp_data.magnetic_strength}")
 
     return {"ok": 200}
+
+
+@app.route("/image", methods=["POST"])
+def image_post():
+    body = request.get_json()
+
+    mp_data.image = body["image"]
+
+    return {"ok": 200}
+
+@app.route("/image", methods=["GET"])
+def image_get():
+
+     return {
+        "width": SCREEN_SIZE_X,
+        "height": SCREEN_SIZE_Y,
+        "bitDepth": 14,
+        "image": mp_data.image,
+    }
 
 if __name__ == "__main__":
     app.run(debug=True)
