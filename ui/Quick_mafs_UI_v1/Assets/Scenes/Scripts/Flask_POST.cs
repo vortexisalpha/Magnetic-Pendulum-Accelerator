@@ -15,6 +15,7 @@ public class ControlData
 public class FlaskManager : MonoBehaviour
 {   
     private string endpoint = "controller_data";
+    private string URL;
 
     [SerializeField] GameObject dampingFactorController;
     [SerializeField] GameObject magneticStrengthController;
@@ -22,52 +23,64 @@ public class FlaskManager : MonoBehaviour
     [SerializeField] GameObject pendulumHeightController;
 
     [SerializeField] private float postInterval = 0.1f; 
+    
+    //must serialize feild on gameobjects so cast to sliders to receive display values
+    private SliderTextDisplay dampingSlider;
+    private SliderTextDisplay magneticSlider;
+    private SliderTextDisplay lengthSlider;
+    private SliderTextDisplay heightSlider;
 
     private ControlData data = new ControlData();
-    private float timer = 0f;
     
     //on start, establish url and coroutine (async function)
     void Start()
     {
-        string URL = "http://127.0.0.1:5000/" + endpoint;
-        StartCoroutine(PostLoop());
+        URL = "http://127.0.0.1:5000/" + endpoint;
+
+        dampingSlider = dampingFactorController.GetComponent<SliderTextDisplay>();
+        magneticSlider = magneticStrengthController.GetComponent<SliderTextDisplay>();
+        lengthSlider = lengthController.GetComponent<SliderTextDisplay>();
+        heightSlider = pendulumHeightController.GetComponent<SliderTextDisplay>();
+
+        StartCoroutine(postLoop());
     }   
-
-    //compile data every frame
-    void Update() 
-    {
-        float dampingFactor = dampingFactorController.displayValue;
-        float magneticStrength = magneticStrengthController.displayValue;
-        float pendulumLength = lengthController.displayValue;
-        float pendulumHeight = pendulumHeightController.displayValue;
-
-        string json = compileJson(dampingFactor, magneticStrength, pendulumLength, pendulumHeight);
-    }
 
     private IEnumerator postLoop() 
     {
         while (true) 
         {
-            string json = CompileJson();
+            string json = compileJson();
             yield return PostJson(json);
 
             yield return new WaitForSeconds(postInterval);
         }
     }
 
-    private IEnumerator PostJson(string json) {
+    private IEnumerator PostJson(string json) 
+    {
+        //initialise raw byte array to be sent as json in post req
+        byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
 
+        using (UnityWebRequest request = new UnityWebRequest(URL, "POST"))
+        {
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            yield return request.SendWebRequest();
+
+            //can add error checking here
+        }
     }
 
-    private string compileJson(float dampingFactor, float magneticStrength, float pendulumLength, float pendulumHeight) 
+    private string compileJson() 
     {
-        data.dampingFactor = dampingFactor;
-        data.magneticStrength = magneticStrength;
-        data.pendulumLength = pendulumLength;
-        data.pendulumHeight = pendulumHeight;
+        data.dampingFactor = dampingSlider.displayValue;
+        data.magneticStrength = magneticSlider.displayValue;
+        data.pendulumLength = lengthSlider.displayValue;
+        data.pendulumHeight = heightSlider.displayValue;
 
-        string json = JsonUtility.ToJson(data, true);
-        return json;
+        return JsonUtility.ToJson(data, true);
     }
 
 
