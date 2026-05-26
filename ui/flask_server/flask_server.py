@@ -108,7 +108,7 @@ def magnet_remove():
     return {"ok": 200}
 
 
-@app.route("/magnet_update_position")
+@app.route("/magnet_update_position", methods=["POST"])
 def magnet_update_position():
     body = request.get_json()
 
@@ -123,43 +123,6 @@ def magnet_update_position():
             break
 
     return {"ok": 200}
-
-
-@app.route("/magnetic_strength")
-def magnetic_strength():
-    body = request.get_json()
-
-    mp_data.magnetic_strength = float(body["magnetic_strength"])
-
-    return {"ok": 200}
-
-
-@app.route("/damping_factor")
-def damping_factor():
-    body = request.get_json()
-
-    mp_data.damping_factor = float(body["damping_factor"])
-
-    return {"ok": 200}
-
-
-@app.route("/pendulum_height")
-def pendulum_height():
-    body = request.get_json()
-
-    mp_data.pendulum_height = float(body["pendulum_height"])
-
-    return {"ok": 200}
-
-
-@app.route("/pendulum_length")
-def length_of_pendulum():
-    body = request.get_json()
-
-    mp_data.pendulum_length = float(body["pendulum_length"])
-
-    return {"ok": 200}
-
 
 @app.route("/controller_data", methods=["POST"])
 def controller_data():
@@ -178,4 +141,4 @@ def controller_data():
     return {"ok": 200}
 
 if __name__ == "__main__":
-    app.run()
+    app.run(debug=True)
