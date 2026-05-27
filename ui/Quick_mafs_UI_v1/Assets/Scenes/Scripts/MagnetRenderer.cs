@@ -52,15 +52,29 @@ public class MagnetRenderer : MonoBehaviour
 
     IEnumerator PollLoop()
     {
+        var wait = new WaitForSeconds(pollIntervalSeconds);
+        while (true)
+        {
+            yield return FetchInfo();
+            yield return wait;
+        }
     }
 
     IEnumerator FetchInfo()
     {
     }
-    void ClearAndApply(){
 
+    void ClearAndApply()
+    {
     }
 
+    void ClearPixels()
+    {
+    }
+
+    void DrawCircle(int cx, int cy, int r, Color32 color)
+    {
+    }
 }
 
 
