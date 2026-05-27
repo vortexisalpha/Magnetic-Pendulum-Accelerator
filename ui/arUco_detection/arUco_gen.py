@@ -5,7 +5,7 @@ dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
 size_of_marker = 400  # size of marker.
 
 # generating IDs with for loop
-for marker_id in range(4):
+for marker_id in range(7):
     # generating the marker
     img = cv2.aruco.generateImageMarker(dictionary, marker_id, size_of_marker)
 

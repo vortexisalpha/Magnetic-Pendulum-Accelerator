@@ -12,31 +12,13 @@ image = cv2.imread("./IMG_8940.jpg")
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
 # Detect ArUco markers in the image.
-corners, marker_ids, rejected = cv2.aruco.detectMarkers(gray, dictionary)
+params = cv2.aruco.DetectorParameters()
+detector = cv2.aruco.ArucoDetector(dictionary, params)
+corners, ids, rejected = detector.detectMarkers(gray)
 
 # If markers are detected, draw them on the image.
-if corners:
-    # looping through detected markers and marker ids at same time.
-    for corner, marker_id in zip(corners, marker_ids):
-        # Draw the marker corners.
-        cv2.polylines(
-            image, [corner.astype(np.int32)], True, (0, 255, 255), 3, cv2.LINE_AA
-        )
-
-        # Get the top-right, top-left, bottom-right, and bottom-left corners of the marker.
-        # change the shape of numpy array to 4 by 2
-        corner = corner.reshape(4, 2)
-
-        # change the type of numpy array values integers
-        corner = corner.astype(int)
-
-        # extracting the corner of marker
-        top_right, top_left, bottom_right, bottom_left = corner
-
-        # Write the marker ID on the image.
-        cv2.putText(
-            image, f"id: {marker_id[0]}", top_right, font, 1.3, (255, 0, 255), 2
-        )
+if ids is not None:
+    cv2.aruco.drawDetectedMarkers(image, corners, ids)
 
 # Save the image.
 cv2.imwrite("out_image1.png", image)
