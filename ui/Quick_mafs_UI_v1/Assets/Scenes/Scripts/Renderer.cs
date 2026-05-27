@@ -53,6 +53,10 @@ public class Renderer : MonoBehaviour
                     int bufPos = (height - y - 1) * width + x; //array buffer is inverted in unity, flip y
 
                     catPixels[bufPos] = palette[top2];
+                    
+                    //calculate intensity from 0-255 for iterations
+                    byte intensity = (byte)((bottom12 * 255) / 4095)
+                    valPixels[bufPos] = Colour32(intensity, intensity, intensity, 255);
 
                 }
             }
