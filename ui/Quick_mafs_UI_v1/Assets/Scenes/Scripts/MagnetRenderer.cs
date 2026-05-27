@@ -39,6 +39,28 @@ public class MagnetRenderer : MonoBehaviour
         new Color32( 70, 130, 230, 255),
     };
 
+    void Start()
+    {
+        tex = new Texture2D(W, H, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Point;
+        pixels = new Color32[W * H];
+        miniDisplay.texture = tex;
+
+        ClearAndApply();
+        StartCoroutine(PollLoop());
+    }
+
+    IEnumerator PollLoop()
+    {
+    }
+
+    IEnumerator FetchInfo()
+    {
+    }
+    void ClearAndApply(){
+
+    }
+
 }
 
 
