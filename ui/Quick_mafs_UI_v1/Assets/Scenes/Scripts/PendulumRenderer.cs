@@ -76,6 +76,11 @@ public class PendulumRenderer : MonoBehaviour
         }
     }
 
+    public void SetCategoryVisible(bool visible)
+    {
+        valueImage.gameObject.SetActive(visible);
+    }
+
     void Update()
     {
         StartCoroutine(FetchImage());
