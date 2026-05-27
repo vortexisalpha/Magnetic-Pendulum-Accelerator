@@ -16,7 +16,9 @@ public class OrbitCamera : MonoBehaviour
     private float yaw = 0f;
     private float pitch = 25f;
 
-    void OnEnable() { ApplyTransform(); }
+    void OnEnable() { 
+        ApplyTransform(); 
+    }
 
     void Update()
     {
