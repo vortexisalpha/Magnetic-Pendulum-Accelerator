@@ -1,4 +1,8 @@
 using UnityEngine;
+using UnityEngine.UI;
+using System;
+using System.Collections;
+using UnityEngine.Networking;
 using Newtonsoft.Json; //needed for 2d arr json handling
 
 public class ImageResponse
@@ -9,8 +13,10 @@ public class ImageResponse
     public int[][] image; 
 }
 
-public class Renderer : MonoBehaviour
-{
+public class PendulumRenderer : MonoBehaviour
+{    
+    [SerializeField] private RawImage categoryImage;
+    [SerializeField] private RawImage valueImage;
 
     Color32[] palette = {
                 new Color32(0,0,255,255),  //00
@@ -21,7 +27,7 @@ public class Renderer : MonoBehaviour
 
     void Start()
     {
-        
+        StartCoroutine(FetchImage());
     }
 
     IEnumerator FetchImage()
@@ -33,7 +39,7 @@ public class Renderer : MonoBehaviour
 
             var resp = JsonConvert.DeserializeObject<ImageResponse>(req.downloadHandler.text);
             int width = resp.width;
-            height = resp.height;
+            int height = resp.height;
 
             var texCategory = new Texture2D(width, height, TextureFormat.RGBA32, false);
             var texValue = new Texture2D(width, height, TextureFormat.RGBA32, false);
@@ -43,8 +49,8 @@ public class Renderer : MonoBehaviour
             var catPixels = new Color32[width * height];
             var valPixels = new Color32[width * height];
 
-            for (y = 0; y < height; y++){
-                for (x = 0; x < width; x++){
+            for (int y = 0; y < height; y++){
+                for (int x = 0; x < width; x++){
                     int pixel = resp.image[y][x];
 
                     int top2 = (pixel >> (resp.bitDepth - 2)) & 0x3; // right shifted by all but 2 and then & with ...011
@@ -55,15 +61,23 @@ public class Renderer : MonoBehaviour
                     catPixels[bufPos] = palette[top2];
                     
                     //calculate intensity from 0-255 for iterations
-                    byte intensity = (byte)((bottom12 * 255) / 4095)
+                    byte intensity = (byte)((bottom12 * 255) / 4095);
                     valPixels[bufPos] = Colour32(intensity, intensity, intensity, 255);
-
                 }
             }
+
+            texCategory.setPixels(catPixels);
+            texValue.setPixels(valPixels);
+            texCategory.Apply();
+            texValue.Apply();
+
+            categoryImage.texture = texCategory;
+            valueImage.texture = texValue;
         }
     }
+
     void Update()
     {
-        
+        StartCoroutine(FetchImage());
     }
 }
