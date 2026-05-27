@@ -13,8 +13,10 @@
 //   - Reads BRAM sequentially (pixel 0..19199) after computation completes
 //   - Packs 4 results per 32-bit AXI-Stream word (1 byte per pixel)
 //   - Each byte: [5:2]=step_category, [1:0]=magnet_id, 6 bits in total
-//   - 4800 words total, tlast on last word (signals end of stream), tuser=SOF on first word (start of frame)
+//   - 4800 words total, tlast every 40 words (end of each line) + end of frame
+//   - tuser=SOF on first word (start of frame)
 //   - AXI-Stream driven directly (no packer needed)
+//   - line_px_cnt replaces modulo for efficient hardware synthesis
 //
 // one_lane_top connections updated:
 //   - fb_rd_addr: driven by readout state machine
@@ -75,6 +77,11 @@ reg [REG_FILE_AWIDTH-1:0] writeAddr, readAddr;
 reg [31:0]                readData, writeData;
 reg [1:0]                 readState  = AWAIT_RADD;
 reg [2:0]                 writeState = AWAIT_WADD_AND_DATA;
+
+// line_px_cnt: tracks pixel offset within current line
+// counts 0, 4, 8 ... 156 then resets at end of line
+// end-of-line when == 156 (= 160 - 4 = PIXELS_PER_LINE - 4)
+reg [7:0] line_px_cnt;
 
 // -------------------------------------------------------------------------
 // AXI-Lite read
@@ -149,7 +156,7 @@ assign s_axi_lite_bresp   = (writeAddr < REG_FILE_SIZE) ? AXI_OK : AXI_ERR;
 // -------------------------------------------------------------------------
 // one_lane_top
 // Register map (all Q4.12 fixed-point unless noted):
-//  [0]  control (unused for now)
+//  [0]  control (bit[0] = start trigger)
 //  [1]  x_min        [2]  y_min
 //  [3]  x_step       [4]  y_step
 //  [5]  mag0_x       [6]  mag0_y
@@ -165,7 +172,6 @@ wire [5:0]  fb_rd_data;
 wire        frame_done;
 reg  [14:0] fb_rd_addr_r;
 
-// reg[0][0] = start trigger: computation begins on rising edge, resets on 0
 wire start_w = reg_file[0][0];
 
 one_lane_top #(
@@ -220,11 +226,14 @@ one_lane_top #(
 // Each byte encodes: [5:2]=step_category(0-11), [1:0]=magnet_id(1-3)
 //
 // 19200 pixels / 4 per word = 4800 words total
-// tuser[0] = SOF (start of frame, first word only)
-// tlast    = EOF (last word only)
+// 160 pixels / 4 = 40 words per line
+// tlast every 40 words (end of each line) AND on final word
+// tuser[0] = SOF on first word only
 //
-// Per-pixel: 2 cycles (PS_ISSUE + PS_COLLECT)
-// Total: ~38400 cycles per frame readout at 100MHz = ~0.38ms
+// line_px_cnt: 0, 4, 8 ... 156 within each line
+//   end-of-line detected when line_px_cnt == 156
+//   resets to 0 at start of each new line
+//   increments by 4 mid-line (4 pixels per word)
 // -------------------------------------------------------------------------
 localparam TOTAL_PIXELS = 15'd19200;   // 160 * 120
 
@@ -254,14 +263,16 @@ always @(posedge out_stream_aclk) begin
         out_vld_r    <= 0;
         out_lst_r    <= 0;
         words_sent   <= 0;
+        line_px_cnt  <= 0;   // reset line counter
     end else begin
         case (ps)
 
         PS_IDLE: begin
-            out_vld_r  <= 0;
-            px_done    <= 0;
-            bpos       <= 0;
-            words_sent <= 0;
+            out_vld_r   <= 0;
+            px_done     <= 0;
+            bpos        <= 0;
+            words_sent  <= 0;
+            line_px_cnt <= 0;   // reset at start of each frame
             if (frame_done && start_w) begin
                 fb_rd_addr_r <= 0;
                 ps           <= PS_ISSUE;
@@ -278,16 +289,18 @@ always @(posedge out_stream_aclk) begin
             px_done <= px_done + 1;
 
             if (bpos == 2'd3) begin
-                // fourth byte — complete word
-                // wbuf[23:0] holds bytes 0-2 from previous cycles
-                // current fb_rd_data is byte 3
+                // Fourth byte completes a 32-bit word
                 out_word_r <= {{2'b0, fb_rd_data}, wbuf};
                 out_vld_r  <= 1'b1;
-                out_lst_r  <= (px_done == TOTAL_PIXELS - 1);
-                bpos       <= 0;
-                ps         <= PS_SEND;
+
+                // tlast at end of each line (line_px_cnt==156)
+                // OR at end of full frame (last pixel)
+                out_lst_r  <= (px_done == TOTAL_PIXELS - 1) ||
+                               (line_px_cnt == 8'd156);
+
+                bpos <= 0;
+                ps   <= PS_SEND;
             end else begin
-                // accumulate byte into wbuf
                 case (bpos)
                     2'd0: wbuf[7:0]   <= {2'b0, fb_rd_data};
                     2'd1: wbuf[15:8]  <= {2'b0, fb_rd_data};
@@ -308,8 +321,19 @@ always @(posedge out_stream_aclk) begin
                 words_sent <= words_sent + 1;
 
                 if (out_lst_r) begin
-                    ps <= PS_DONE;
+                    // End of line or end of frame
+                    if (px_done == TOTAL_PIXELS) begin
+                        // All pixels sent — frame complete
+                        ps <= PS_DONE;
+                    end else begin
+                        // End of line — reset line counter, continue
+                        line_px_cnt  <= 0;
+                        fb_rd_addr_r <= fb_rd_addr_r + 1;
+                        ps           <= PS_ISSUE;
+                    end
                 end else begin
+                    // Mid-line — advance line counter by 4
+                    line_px_cnt  <= line_px_cnt + 8'd4;
                     fb_rd_addr_r <= fb_rd_addr_r + 1;
                     ps           <= PS_ISSUE;
                 end
@@ -318,7 +342,7 @@ always @(posedge out_stream_aclk) begin
 
         PS_DONE: begin
             out_vld_r <= 0;
-            if (!start_w) ps <= PS_IDLE;  // return to idle so next start triggers a new frame
+            if (!start_w) ps <= PS_IDLE;
         end
 
         default: ps <= PS_IDLE;
@@ -333,3 +357,4 @@ assign out_stream_tkeep  = 4'hF;
 assign out_stream_tuser  = 1'b0;
 
 endmodule
+
