@@ -32,4 +32,15 @@ resp = requests.post(
     "http://localhost:5000/image",
     json={"image": image},
 )
+
+for i, (uid, x, y) in enumerate([
+    ("m0", 40,  30),
+    ("m1", 120, 30),
+    ("m2", 40,  90),
+    ("m3", 120, 90),
+]):
+    requests.post("http://localhost:5000/magnet_add",
+                  json={"uid": uid, "x": x, "y": y})
+
 print(resp.status_code, resp.json())
+
