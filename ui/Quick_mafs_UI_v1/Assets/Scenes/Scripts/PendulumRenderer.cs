@@ -130,6 +130,40 @@ public class PendulumRenderer : MonoBehaviour
         valueImage.gameObject.SetActive(visible);
     }
 
+    Color32 PlasmaColor(byte value)
+    {
+        float t = value / 255f;
+        Color32[] stops =
+        {
+            new Color32(13, 8, 135, 255),
+            new Color32(75, 3, 161, 255),
+            new Color32(125, 3, 168, 255),
+            new Color32(168, 34, 150, 255),
+            new Color32(203, 70, 121, 255),
+            new Color32(229, 107, 93, 255),
+            new Color32(248, 148, 65, 255),
+            new Color32(253, 195, 40, 255),
+            new Color32(240, 249, 33, 255)
+
+        };
+
+        float scaled = t * (stops.Length - 1);
+        int i = Mathf.FloorToInt(scaled);
+        int j = Mathf.Min(i + 1, stops.Length - 1);
+        float localT = scaled - i;
+
+        return LerpColor32(stops[i], stops[j], localT);
+    }
+
+    Color32 LerpColor32(Color32 a, Color32 b, float t)
+    {
+        return new Color32(
+                (byte)Mathf.Lerp(a.r, b.r, t),
+                (byte)Mathf.Lerp(a.g, b.g, t),
+                (byte)Mathf.Lerp(a.b, b.b, t),
+                255);
+    }
+
     void Update()
     {
         StartCoroutine(FetchImage());
