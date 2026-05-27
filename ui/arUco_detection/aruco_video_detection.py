@@ -9,27 +9,16 @@ _TEXT_FONT = cv2.FONT_HERSHEY_PLAIN
 
 def annotate_markers(frame: np.ndarray, dictionary: cv2.aruco.Dictionary) -> np.ndarray:
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    corners, marker_ids, _ = cv2.aruco.detectMarkers(gray, dictionary)
+    params = cv2.aruco.DetectorParameters()
+    detector = cv2.aruco.ArucoDetector(dictionary, params)
+    corners, marker_ids, _ = detector.detectMarkers(gray)
 
     # No markers detected — nothing to draw.
     if not corners:
         return frame
-
-    for corner, marker_id in zip(corners, marker_ids):
-        # Outline the marker with a yellow quadrilateral.
-        cv2.polylines(
-                frame, [corner.astype(np.int32)], True, (0, 255, 255), 3, cv2.LINE_AA
-                )
-
-        # Reshape (1, 4, 2) float corners → (4, 2) int pixel coords.
-        pts = corner.reshape(4, 2).astype(int)
-        top_right, _top_left, _bottom_right, _bottom_left = pts
-
-        # Place the ID label near the top-right corner.
-        cv2.putText(
-                frame, f"id: {marker_id[0]}", top_right, _TEXT_FONT, 2, (255, 0, 255), 2
-                )
-
+    
+    cv2.aruco.drawDetectedMarkers(frame, corners, marker_ids)
+    
     return frame
 
 
