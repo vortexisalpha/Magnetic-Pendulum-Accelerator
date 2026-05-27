@@ -12,7 +12,6 @@ public class SliderTextDisplay : MonoBehaviour
 
     void Start()
     {
-        Debug.Log("Started: " + paramName);
         sliderVal.text = paramMin.ToString("0.00");
         paramName.text = param;
     }
