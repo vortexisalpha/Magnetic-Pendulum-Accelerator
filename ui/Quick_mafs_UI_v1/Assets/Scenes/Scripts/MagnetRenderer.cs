@@ -29,14 +29,14 @@ public class MagnetRenderer : MonoBehaviour
 
     private Texture2D tex;
     private Color32[] pixels;
-    private readonly Color32 bg = new Color32(30, 30, 40, 255);
+    private readonly Color32 bg = new Color32(40, 40, 40, 255);
 
     private Color32[] palette =
     {
-        new Color32(  0,   0,   0, 255),
-        new Color32(230,  60,  60, 255),
-        new Color32( 60, 200,  90, 255),
-        new Color32( 70, 130, 230, 255),
+        new Color32(0,0,255,255),
+        new Color32(0,255,0,255),
+        new Color32(255,0,0,255),
+        new Color32(0,0,0,0)
     };
 
     void Start()
@@ -62,14 +62,36 @@ public class MagnetRenderer : MonoBehaviour
 
     IEnumerator FetchInfo()
     {
+        using (var req = UnityWebRequest.Get("http://localhost:5000/info"))
+        {
+            yield return req.SendWebRequest();
+            if (req.result != UnityWebRequest.Result.Success) yield break;
+
+            var info = JsonConvert.DeserializeObject<InfoResponse>(req.downloadHandler.text);
+
+            ClearPixels();
+            int idx = 0;
+            foreach (var coord in info.magnets)
+            {
+                var color = palette[idx % palette.Length]; // % is just for safety realistically we never have more than 4 magnets (for now).
+                DrawCircle((int)coord.Value.x, (int)coord.Value.y, magnetRadius, color);
+                idx++;
+            }
+            tex.SetPixels32(pixels);
+            tex.Apply();
+        }
     }
 
     void ClearAndApply()
     {
+        ClearPixels();
+        tex.SetPixels32(pixels);
+        tex.Apply();
     }
 
     void ClearPixels()
     {
+        for (int i = 0; i < pixels.Length; i++) pixels[i] = bg;
     }
 
     void DrawCircle(int cx, int cy, int r, Color32 color)
