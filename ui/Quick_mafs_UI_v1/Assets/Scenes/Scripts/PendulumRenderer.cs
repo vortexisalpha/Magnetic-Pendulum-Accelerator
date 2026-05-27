@@ -25,9 +25,47 @@ public class PendulumRenderer : MonoBehaviour
                 new Color32(0,0,0,255), //11
             };
 
+    //3D stuff:
+    [SerializeField] private MeshFilter mesh3D;
+    [SerializeField] private float heightScale = 0.05f;  // iterations (height)
+    [SerializeField] private float xyScale     = 0.5f;   // pixel (spacing)
+
+    private Mesh runtimeMesh;
+    private Vector3[] verts3D;
+    private Color32[] vertColors3D;
+    private int[] tris3D;
+
     void Start()
     {
+        BuildMeshSkeleton(160, 120);
         StartCoroutine(FetchImage());
+    }
+
+    void BuildMeshSkeleton(int w, int h)
+    {
+        int vCount = w * h;
+        verts3D = new Vector3[vCount];
+        vertColors3D = new Color32[vCount];
+
+        int quadCount = (w - 1) * (h - 1);
+        tris3D = new int[quadCount * 6];
+        int t = 0;
+        for (int y = 0; y < h - 1; y++)
+        {
+            for (int x = 0; x < w - 1; x++)
+            {
+                int bl = y * w + x;
+                int br = bl + 1;
+                int tl = bl + w;
+                int tr = tl + 1;
+                tris3D[t++] = bl; tris3D[t++] = tl; tris3D[t++] = br;
+                tris3D[t++] = br; tris3D[t++] = tl; tris3D[t++] = tr;
+            }
+        }
+
+        runtimeMesh = new Mesh();
+        runtimeMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        mesh3D.mesh = runtimeMesh;
     }
 
     IEnumerator FetchImage()
@@ -63,6 +101,11 @@ public class PendulumRenderer : MonoBehaviour
                     //calculate intensity from 0-255 for iterations
                     byte intensity = (byte)((bottom12 * 255) / 4095);
                     valPixels[bufPos] = new Color32(intensity, intensity, intensity, 255);
+
+                    //3d:
+                    int meshIdx = y * width + x;
+                    verts3D[meshIdx] = new Vector3(x * xyScale, bottom12 * heightScale, y * xyScale);
+                    vertColors3D[meshIdx] = palette[top2];
                 }
             }
 
@@ -73,6 +116,12 @@ public class PendulumRenderer : MonoBehaviour
 
             categoryImage.texture = texCategory;
             valueImage.texture = texValue;
+            
+            //3d:
+            runtimeMesh.vertices = verts3D;
+            runtimeMesh.colors32 = vertColors3D;
+            runtimeMesh.triangles = tris3D;
+            runtimeMesh.RecalculateBounds();
         }
     }
 
