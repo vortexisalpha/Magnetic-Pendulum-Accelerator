@@ -6,8 +6,6 @@ from time import perf_counter
 # Font used when overlaying marker IDs on the frame.
 _TEXT_FONT = cv2.FONT_HERSHEY_PLAIN
 
-def marker_pos_transform():
-    pass
 
 def detect_markers(frame: np.ndarray, dictionary: cv2.aruco.Dictionary) -> np.ndarray:
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -20,29 +18,55 @@ def detect_markers(frame: np.ndarray, dictionary: cv2.aruco.Dictionary) -> np.nd
         return frame
     
     cv2.aruco.drawDetectedMarkers(frame, corners, marker_ids)
-    # Obtains the corner pixel coordinates of all detected markers, finds and annotates the center
-    for single_marker_corners in corners:
+
+    board_corners = [None, None, None, None]
+    detected_tokens = []
+    # Iterates through all detected markers and finds their centers
+    for marker_id, single_marker_corners in zip(marker_ids, corners):
         x0, y0 = single_marker_corners[0][0]
         x1, y1 = single_marker_corners[0][1]
         x2, y2 = single_marker_corners[0][2]
         x3, y3 = single_marker_corners[0][3]
 
-        if (x2 - x0) == 0 or (x3 - x1) == 0:
-        # fall back to simple average of all four corners
-            x_intersect = (x0 + x1 + x2 + x3) / 4
-            y_intersect = (y0 + y1 + y2 + y3) / 4
+        # Finds centers by calculating diagonal intersection
+        # If both diagonals are vertical (unlikely)
+        if abs(x0-x2) < 1e-6 and abs(x1-x3) < 1e-6:
+            continue ## We don't do anything? What do we feed into the pos_transform?
+        # If only diagonal joining (x0, y0) and (x2, y2) is vertical
+        elif abs(x0-x2) < 1e-6:
+            x_center = x0
+            m2 = (y3-y1)/(x3-x1)
+            y_center = m2*(x0-x1)+y1
+        # If only diagonal joining (x1, y1) and (x3, y3) is vertical
+        elif abs(x1-x3) < 1e-6:
+            x_center = x1
+            m1 = (y2-y0)/(x2-x0)
+            y_center = m1*(x1-x0)+y0
+        else:
+            m1 = (y2-y0)/(x2-x0)
+            m2 = (y3-y1)/(x3-x1)
 
-        m1 = (y2-y0)/(x2-x0)
-        m2 = (y3-y1)/(x3-x1)
+            # if the diagonals appear to be parallel
+            if abs(m1 - m2) < 1e-6:
+                continue
 
-        #if abs(m1 - m2) < 1e-6: #what to do?
+            x_center = ((y1-y0)+x0*m1-x1*m2)/(m1-m2)
+            y_center = m1*(x_center-x0)+y0
+        
+        # Int casting as pixel positions are integers, but prior rounding to increase accuracy since int casting rounds down
+        x_center_px = int(round(x_center))
+        y_center_px = int(round(y_center))
+        id = marker_id[0]
+        match id:
+            case 0 | 1 | 2 | 3 :
+                board_corners[id] = [x_center_px, y_center_px]
+            case _:
+                pass # Magnet token detected, handle separately
 
-        x_intersect = ((y1-y0)+x0*m1-x1*m2)/(m1-m2)
-        y_intersect = m1*x_intersect+y0-x0*m1
-        cx = int(x_intersect)
-        cy = int(y_intersect)
-        cv2.circle(frame, (cx, cy), radius=5, color=(0, 0, 255), thickness=-1)
-    
+        # Annotating the center
+
+        cv2.circle(frame, (x_center_px, y_center_px), radius=5, color=(0, 0, 255), thickness=-1)
+
     return frame
 
 
