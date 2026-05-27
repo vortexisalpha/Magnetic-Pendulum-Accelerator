@@ -9,7 +9,11 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-#include <filesystem> 
+#include <cctype>
+#include <cerrno>
+#include <cstdio>
+#include <cstdlib>
+#include <sys/stat.h>
 
 // FixedFormat
 // Maps to: Python class FixedFormat (dataclass, frozen=True)
@@ -630,6 +634,134 @@ BasinResult generate_basin_map_fixed(
 // Output helpers
 // Maps to: Python save_outputs(), print summary prints
 
+// Create path and all parents (like pathlib.Path.mkdir(parents=True)).
+static bool mkdir_p(const std::string& path) {
+    if (path.empty())
+        return false;
+    struct stat st;
+    if (stat(path.c_str(), &st) == 0)
+        return S_ISDIR(st.st_mode);
+    const size_t slash = path.find_last_of('/');
+    if (slash != std::string::npos) {
+        const std::string parent = path.substr(0, slash);
+        if (!parent.empty() && !mkdir_p(parent))
+            return false;
+    }
+    if (mkdir(path.c_str(), 0755) != 0 && errno != EEXIST)
+        return false;
+    return stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+// Flask integration — fetch controller params from GET /info, repost via export_to_flask.py
+
+struct FlaskConfig {
+    double magnetic_strength = 1.0;
+    double damping_factor    = 0.20;
+    double pendulum_length   = 9.8;
+    double pendulum_height   = 0.5;
+    bool   fetched           = false;
+};
+
+static std::string shell_escape(const std::string& value) {
+    std::string escaped = "\"";
+    for (char ch : value) {
+        if (ch == '"' || ch == '\\' || ch == '$' || ch == '`')
+            escaped.push_back('\\');
+        escaped.push_back(ch);
+    }
+    escaped.push_back('"');
+    return escaped;
+}
+
+static std::string http_get(const std::string& url) {
+    const std::string cmd = "curl -sf " + shell_escape(url);
+    FILE* pipe = popen(cmd.c_str(), "r");
+    if (!pipe)
+        throw std::runtime_error("Failed to run curl");
+
+    std::string response;
+    char buffer[4096];
+    while (true) {
+        size_t n = std::fread(buffer, 1, sizeof(buffer), pipe);
+        if (n == 0)
+            break;
+        response.append(buffer, n);
+    }
+
+    const int status = pclose(pipe);
+    if (status != 0 || response.empty())
+        throw std::runtime_error("HTTP GET failed: " + url);
+
+    return response;
+}
+
+static bool json_number(const std::string& json, const std::string& key, double& out) {
+    const std::string needle = "\"" + key + "\":";
+    const size_t pos = json.find(needle);
+    if (pos == std::string::npos)
+        return false;
+
+    size_t i = pos + needle.size();
+    while (i < json.size() && std::isspace(static_cast<unsigned char>(json[i])))
+        i++;
+
+    char* end = nullptr;
+    out = std::strtod(json.c_str() + i, &end);
+    return end != json.c_str() + i;
+}
+
+static FlaskConfig fetch_flask_config(const std::string& flask_base) {
+    const std::string json = http_get(flask_base + "/info");
+
+    FlaskConfig cfg;
+    if (!json_number(json, "magnetic_strength", cfg.magnetic_strength) ||
+        !json_number(json, "damping_factor",    cfg.damping_factor)    ||
+        !json_number(json, "pendulum_length",   cfg.pendulum_length)   ||
+        !json_number(json, "pendulum_height",    cfg.pendulum_height)) {
+        throw std::runtime_error("Flask /info JSON missing required controller fields");
+    }
+
+    cfg.fetched = true;
+
+    if (cfg.pendulum_height <= 0.0)
+        throw std::runtime_error("Flask pendulum_height must be positive");
+    if (cfg.pendulum_length <= 0.0)
+        throw std::runtime_error("Flask pendulum_length must be positive");
+
+    return cfg;
+}
+
+// Unity slider labels map directly onto the simplified model:
+//   damping_factor    -> gamma
+//   magnetic_strength -> mu
+//   pendulum_length L -> omega2 = g / L
+//   pendulum_height h -> h2 = h^2
+static void apply_flask_config(PhysicsParams& phys, const FlaskConfig& cfg) {
+    constexpr double g = 9.8;
+
+    phys.gamma  = cfg.damping_factor;
+    phys.mu     = cfg.magnetic_strength;
+    phys.omega2 = g / cfg.pendulum_length;
+    phys.h2     = cfg.pendulum_height * cfg.pendulum_height;
+}
+
+static void repost_to_flask(const std::string& flask_base) {
+    const std::string arg = shell_escape(flask_base);
+    const std::string cmd_venv =
+        ".venv/bin/python Software/export_to_flask.py --flask-base " + arg;
+    const std::string cmd_system =
+        "python3 Software/export_to_flask.py --flask-base " + arg;
+
+    std::cout << "\nReposting image and magnets to Flask...\n";
+    if (std::system(cmd_venv.c_str()) == 0)
+        return;
+    if (std::system(cmd_system.c_str()) == 0)
+        return;
+
+    throw std::runtime_error(
+        "Failed to repost results via Software/export_to_flask.py");
+}
+
 // Save raw binary file — readable in Python with np.fromfile
 template<typename T>
 void save_binary(const std::vector<T>& data, const std::string& path) {
@@ -773,6 +905,9 @@ struct Args {
     bool   no_classify_on_timeout = false;
     // OutputParams
     std::string out_dir = "cpp_outputs";
+    // Flask integration
+    std::string flask_base = "http://127.0.0.1:5000";
+    bool        use_flask  = true;
 };
 
 Args parse_args(int argc, char* argv[]) {
@@ -801,6 +936,8 @@ Args parse_args(int argc, char* argv[]) {
         else if (key == "--lut-size")    { a.lut_size    = std::stoi(val); i++; }
         else if (key == "--lut-q-max")   { a.lut_q_max   = std::stod(val); i++; }
         else if (key == "--out-dir")     { a.out_dir     = val;            i++; }
+        else if (key == "--flask-base")  { a.flask_base  = val;            i++; }
+        else if (key == "--no-flask")    { a.use_flask   = false; }
         else if (key == "--no-classify-on-timeout") { a.no_classify_on_timeout = true; }
         else if (key == "--force-mode") {
             a.use_lut = (val == "lut-force");
@@ -827,6 +964,26 @@ int main(int argc, char* argv[]) {
     phys.h2     = args.h2;
     phys.mu     = args.mu;
     phys.dt     = args.dt;
+
+    if (args.use_flask) {
+        try {
+            FlaskConfig flask = fetch_flask_config(args.flask_base);
+            apply_flask_config(phys, flask);
+            std::cout << "Flask controller params (GET /info)\n";
+            std::cout << "  magnetic_strength : " << flask.magnetic_strength << "\n";
+            std::cout << "  damping_factor    : " << flask.damping_factor    << "\n";
+            std::cout << "  pendulum_length   : " << flask.pendulum_length   << "\n";
+            std::cout << "  pendulum_height   : " << flask.pendulum_height   << "\n";
+            std::cout << "  -> gamma, mu, omega2, h2 : "
+                      << phys.gamma  << ", "
+                      << phys.mu     << ", "
+                      << phys.omega2 << ", "
+                      << phys.h2     << "\n\n";
+        } catch (const std::exception& ex) {
+            std::cerr << "Warning: Flask fetch failed (" << ex.what()
+                      << "); using CLI physics defaults.\n\n";
+        }
+    }
 
     SimulationParams sim;
     sim.max_steps           = args.max_steps;
@@ -882,7 +1039,8 @@ int main(int argc, char* argv[]) {
 
     // Python: save_outputs(...)
     // Create output directory
-    std::filesystem::create_directories(args.out_dir);
+    if (!mkdir_p(args.out_dir))
+        throw std::runtime_error("Cannot create output directory: " + args.out_dir);
 
     save_binary(result.basin,   args.out_dir + "/basin.bin");
     save_binary(result.steps,   args.out_dir + "/steps.bin");
@@ -895,6 +1053,14 @@ int main(int argc, char* argv[]) {
     std::cout << "  steps.bin      (int32, H x W, load: np.fromfile(..., np.int32))\n";
     std::cout << "  settled.bin    (uint8, H x W, load: np.fromfile(..., np.uint8))\n";
     std::cout << "  summary.json\n";
+
+    if (args.use_flask) {
+        try {
+            repost_to_flask(args.flask_base);
+        } catch (const std::exception& ex) {
+            std::cerr << "Warning: Flask repost failed (" << ex.what() << ")\n";
+        }
+    }
 
     return 0;
 }

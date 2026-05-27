@@ -1,3 +1,11 @@
+# macOS
+.DS_Store
+**/.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
 maths-accelerator/overlay/base
 maths-accelerator/overlay/NA/ps7_summary.html
 *.log

@@ -100,7 +100,7 @@ public class PendulumRenderer : MonoBehaviour
                     
                     //calculate intensity from 0-255 for iterations
                     byte intensity = (byte)((bottom12 * 255) / 4095);
-                    valPixels[bufPos] = new Color32(intensity, intensity, intensity, 255);
+                    valPixels[bufPos] = PlasmaColor(intensity);
 
                     //3d:
                     int meshIdx = y * width + x;
