@@ -165,6 +165,9 @@ wire [5:0]  fb_rd_data;
 wire        frame_done;
 reg  [14:0] fb_rd_addr_r;
 
+// reg[0][0] = start trigger: computation begins on rising edge, resets on 0
+wire start_w = reg_file[0][0];
+
 one_lane_top #(
     .W(16), .F(12),
     .LUT_SIZE(1024), .LUT_ADDR_W(10),
@@ -173,6 +176,7 @@ one_lane_top #(
 ) u_one_lane_top (
     .clk  (out_stream_aclk),
     .rst  (!periph_resetn),
+    .start(start_w),
 
     .x_min (reg_file[1][15:0]),
     .y_min (reg_file[2][15:0]),
@@ -260,7 +264,7 @@ always @(posedge out_stream_aclk) begin
             px_done    <= 0;
             bpos       <= 0;
             words_sent <= 0;
-            if (frame_done) begin
+            if (frame_done && start_w) begin
                 fb_rd_addr_r <= 0;
                 ps           <= PS_ISSUE;
             end
@@ -318,7 +322,7 @@ always @(posedge out_stream_aclk) begin
 
         PS_DONE: begin
             out_vld_r <= 0;
-            // stay here until periph_resetn goes low (reset)
+            if (!start_w) ps <= PS_IDLE;  // return to idle so next start triggers a new frame
         end
 
         default: ps <= PS_IDLE;

@@ -9,6 +9,7 @@ module one_lane_top #(
 )(
     input logic clk,
     input logic rst,
+    input logic start,
     input logic signed [W-1:0] mag0_x, mag0_y,
     input logic signed [W-1:0] mag1_x, mag1_y,
     input logic signed [W-1:0] mag2_x, mag2_y,
@@ -52,8 +53,11 @@ module one_lane_top #(
             scan_p      <= '0;
             scan_q      <= '0;
             scan_id     <= '0;
-            scan_active <= 1'b1;
+            scan_active <= 1'b0;
         end 
+        else if (start && !scan_active && done_count == 0) begin
+            scan_active <= 1'b1;
+        end
         else if (scan_active && !new_px_pending && !coord_mapper_valid_out) begin
             // advance only when havent went over all the pixels and coord mapper input slot is free
             if (scan_p == IMG_W-1) begin
@@ -316,7 +320,7 @@ module one_lane_top #(
     // frame done counter
     logic [14:0] done_count;
     always_ff @(posedge clk) begin
-        if (rst) done_count <= '0;
+        if (rst || !start) done_count <= '0;
         else if (fb_wr_en) done_count <= done_count + 1;
     end
     assign frame_done = (done_count >= IMG_W * IMG_H); 
