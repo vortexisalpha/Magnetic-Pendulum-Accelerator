@@ -62,12 +62,12 @@ public class PendulumRenderer : MonoBehaviour
                     
                     //calculate intensity from 0-255 for iterations
                     byte intensity = (byte)((bottom12 * 255) / 4095);
-                    valPixels[bufPos] = Colour32(intensity, intensity, intensity, 255);
+                    valPixels[bufPos] = new Color32(intensity, intensity, intensity, 255);
                 }
             }
 
-            texCategory.setPixels(catPixels);
-            texValue.setPixels(valPixels);
+            texCategory.SetPixels32(catPixels);
+            texValue.SetPixels32(valPixels);
             texCategory.Apply();
             texValue.Apply();
 
