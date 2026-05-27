@@ -6,8 +6,10 @@ from time import perf_counter
 # Font used when overlaying marker IDs on the frame.
 _TEXT_FONT = cv2.FONT_HERSHEY_PLAIN
 
+def marker_pos_transform():
+    pass
 
-def annotate_markers(frame: np.ndarray, dictionary: cv2.aruco.Dictionary) -> np.ndarray:
+def detect_markers(frame: np.ndarray, dictionary: cv2.aruco.Dictionary) -> np.ndarray:
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     params = cv2.aruco.DetectorParameters()
     detector = cv2.aruco.ArucoDetector(dictionary, params)
@@ -18,6 +20,28 @@ def annotate_markers(frame: np.ndarray, dictionary: cv2.aruco.Dictionary) -> np.
         return frame
     
     cv2.aruco.drawDetectedMarkers(frame, corners, marker_ids)
+    # Obtains the corner pixel coordinates of all detected markers, finds and annotates the center
+    for single_marker_corners in corners:
+        x0, y0 = single_marker_corners[0][0]
+        x1, y1 = single_marker_corners[0][1]
+        x2, y2 = single_marker_corners[0][2]
+        x3, y3 = single_marker_corners[0][3]
+
+        if (x2 - x0) == 0 or (x3 - x1) == 0:
+        # fall back to simple average of all four corners
+            x_intersect = (x0 + x1 + x2 + x3) / 4
+            y_intersect = (y0 + y1 + y2 + y3) / 4
+
+        m1 = (y2-y0)/(x2-x0)
+        m2 = (y3-y1)/(x3-x1)
+
+        #if abs(m1 - m2) < 1e-6: #what to do?
+
+        x_intersect = ((y1-y0)+x0*m1-x1*m2)/(m1-m2)
+        y_intersect = m1*x_intersect+y0-x0*m1
+        cx = int(x_intersect)
+        cy = int(y_intersect)
+        cv2.circle(frame, (cx, cy), radius=5, color=(0, 0, 255), thickness=-1)
     
     return frame
 
@@ -62,7 +86,7 @@ def stream_webcam_with_aruco(
             fps = 1.0/(now-prev_time)
             prev_time = now
 
-            annotate_markers(frame, dictionary)
+            detect_markers(frame, dictionary)
             annotate_fps(frame, fps)
             cv2.imshow(window_name, frame)
 
