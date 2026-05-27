@@ -241,7 +241,6 @@ reg [23:0] wbuf;         // accumulates bytes 0-2 of current word
 reg [31:0] out_word_r;
 reg        out_vld_r;
 reg        out_lst_r;
-reg        out_sof_r;
 reg [12:0] words_sent;   // 0..4800
 
 always @(posedge out_stream_aclk) begin
@@ -254,7 +253,6 @@ always @(posedge out_stream_aclk) begin
         out_word_r   <= 0;
         out_vld_r    <= 0;
         out_lst_r    <= 0;
-        out_sof_r    <= 0;
         words_sent   <= 0;
     end else begin
         case (ps)
@@ -285,7 +283,6 @@ always @(posedge out_stream_aclk) begin
                 // current fb_rd_data is byte 3
                 out_word_r <= {{2'b0, fb_rd_data}, wbuf};
                 out_vld_r  <= 1'b1;
-                out_sof_r  <= (words_sent == 0);
                 out_lst_r  <= (px_done == TOTAL_PIXELS - 1);
                 bpos       <= 0;
                 ps         <= PS_SEND;
@@ -308,7 +305,6 @@ always @(posedge out_stream_aclk) begin
             if (out_stream_tready) begin
                 out_vld_r  <= 0;
                 out_lst_r  <= 0;
-                out_sof_r  <= 0;
                 words_sent <= words_sent + 1;
 
                 if (out_lst_r) begin
@@ -334,6 +330,6 @@ assign out_stream_tdata  = out_word_r;
 assign out_stream_tvalid = out_vld_r;
 assign out_stream_tlast  = out_lst_r;
 assign out_stream_tkeep  = 4'hF;
-assign out_stream_tuser  = out_sof_r;
+assign out_stream_tuser  = 1'b0;
 
 endmodule
