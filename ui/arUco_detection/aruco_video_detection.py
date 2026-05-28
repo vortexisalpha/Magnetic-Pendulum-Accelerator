@@ -29,20 +29,28 @@ DST_IMSHOW = np.array([
 ], dtype=np.float32)
 
 
-def token_transform(detected_tokens: list, H_sim: np.ndarray) -> list | None:
+def token_transform(detected_tokens_pos: list, H_sim: np.ndarray) -> list:
 
-    token_mapped = [None, None, None]
-    for i, token in enumerate(detected_tokens):
+    mapped_tokens_pos = [None, None, None]
+    for i, token in enumerate(detected_tokens_pos):
         if token is not None:
             # perspectiveTransform is designed to transform batches of curves or contours
             # hence must be shape (1, 1, 2)
             token_f = np.array([[token]], dtype=np.float32)
             mapped = cv2.perspectiveTransform(token_f, H_sim)
-            token_mapped[i] = mapped[0][0]
+            mapped_tokens_pos[i] = mapped[0][0]
 
-    return token_mapped
+    print(type(mapped_tokens_pos))
+    return mapped_tokens_pos
 
-# Need to decompose!
+def annotate_mapped_token_pos(frame: np.ndarray, detected_tokens_pos: list, mapped_tokens_pos: list) -> None:
+    for i, detected_pos in enumerate(detected_tokens_pos):
+        if detected_pos is not None:
+            detected_pos_np = np.array(detected_pos, dtype=np.float32)
+            cv2.putText(frame, f"ID {i+4}: {str(mapped_tokens_pos[i])}", np.round(detected_pos_np).astype(int), _TEXT_FONT, 4, (0, 255, 0), thickness = 2)
+
+
+# Need to decompose! Also, implicitly mutating frame while also returning a new warped frame seems unconventional
 def detect_markers(frame: np.ndarray, detector: cv2.aruco.ArucoDetector) -> np.ndarray | None:
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     corners, marker_ids, _ = detector.detectMarkers(gray)
@@ -55,8 +63,8 @@ def detect_markers(frame: np.ndarray, detector: cv2.aruco.ArucoDetector) -> np.n
     cv2.aruco.drawDetectedMarkers(frame, corners, marker_ids)
 
     # Iterates through all detected markers and finds their centers
-    board_corners = [None, None, None, None]
-    detected_tokens = [None, None, None]
+    board_corners_pos = [None, None, None, None]
+    detected_tokens_pos = [None, None, None]
 
     for marker_id, single_marker_corners in zip(marker_ids, corners):
         x0, y0 = single_marker_corners[0][0]
@@ -92,9 +100,9 @@ def detect_markers(frame: np.ndarray, detector: cv2.aruco.ArucoDetector) -> np.n
         m_id = marker_id[0]
         match m_id:
             case 0 | 1 | 2 | 3 :
-                board_corners[m_id] = [x_center, y_center]
+                board_corners_pos[m_id] = [x_center, y_center]
             case 4 | 5 | 6:
-                detected_tokens[m_id-4] = [x_center, y_center]
+                detected_tokens_pos[m_id-4] = [x_center, y_center]
             case _:
                 pass
 
@@ -106,22 +114,23 @@ def detect_markers(frame: np.ndarray, detector: cv2.aruco.ArucoDetector) -> np.n
         cv2.circle(frame, (x_center_px, y_center_px), radius=5, color=(0, 0, 255), thickness=-1)
 
     # Use detected board corners to do homography mapping, only when all 4 corners are present
-    if None not in board_corners:
-        board_corners_f = np.array(board_corners, dtype = np.float32)
+    if None not in board_corners_pos:
+        board_corners_f = np.array(board_corners_pos, dtype = np.float32)
         H_sim, _  = cv2.findHomography(board_corners_f, DST_POINTS)
         H_view, _ = cv2.findHomography(board_corners_f, DST_IMSHOW)
 
-        token_mapped = token_transform(detected_tokens, H_sim)
-        print(token_mapped)
+        mapped_tokens_pos = token_transform(detected_tokens_pos, H_sim)
+        annotate_mapped_token_pos(frame, detected_tokens_pos, mapped_tokens_pos)
+        print(mapped_tokens_pos)
         return cv2.warpPerspective(frame.copy(), H_view, (WARPED_SIZE, WARPED_SIZE))
     else:
-        print("Not all corners detected!")
+        print("Not all corners detected! Homography not possible, can't map detected token positions to top-down square view")
         return frame
 
 
 def annotate_fps(frame: np.ndarray, fps: float) -> None:
     text = f"FPS: {fps:.1f}"
-    font       = cv2.FONT_HERSHEY_PLAIN
+    font       = _TEXT_FONT
     scale      = 2
     thickness  = 2
     margin     = 10
