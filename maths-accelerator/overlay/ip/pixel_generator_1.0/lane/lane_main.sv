@@ -1,8 +1,8 @@
 module lane_main #(
     parameter W = 16,
     parameter F = 12,
-    parameter LUT_SIZE = 1024, //1024 entries
-    parameter LUT_ADDR_W = 10, // 2^10 = 1024
+    parameter LUT_SIZE = 4096, // 4096 entries
+    parameter LUT_ADDR_W = 12, // 2^12 = 4096
     parameter Q_WIDTH = 18 // Q 7.12 representation, covers roughly -64 to 63
 )(
     input clk,
