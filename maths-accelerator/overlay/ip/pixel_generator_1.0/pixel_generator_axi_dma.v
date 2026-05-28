@@ -145,7 +145,7 @@ assign s_axi_lite_bresp   = (writeAddr < REG_FILE_SIZE) ? AXI_OK : AXI_ERR;
 
 // -------------------------------------------------------------------------
 // one_lane_top
-// Register map (all Q4.14 fixed-point unless noted):
+// Register map (4.14 fixed point implementation to fit everthing inside dsp)
 //  [0]  control (bit[0] = start trigger)
 //  [1]  x_min        [2]  y_min
 //  [3]  x_step       [4]  y_step
