@@ -29,6 +29,7 @@ public class PendulumRenderer : MonoBehaviour
     [SerializeField] private MeshFilter mesh3D;
     [SerializeField] private float heightScale = 0.05f;  // iterations (height)
     [SerializeField] private float xyScale     = 0.5f;   // pixel (spacing)
+    [SerializeField] private float pollIntervalSeconds = 0.5f;
 
     private Mesh runtimeMesh;
     private Vector3[] verts3D;
@@ -38,7 +39,22 @@ public class PendulumRenderer : MonoBehaviour
     void Start()
     {
         BuildMeshSkeleton(160, 120);
-        StartCoroutine(FetchImage());
+        StartCoroutine(PollLoop());
+    }
+
+    void OnDestroy()
+    {
+        StopAllCoroutines();
+    }
+
+    IEnumerator PollLoop()
+    {
+        var wait = new WaitForSeconds(pollIntervalSeconds);
+        while (true)
+        {
+            yield return FetchImage();
+            yield return wait;
+        }
     }
 
     void BuildMeshSkeleton(int w, int h)
@@ -164,8 +180,4 @@ public class PendulumRenderer : MonoBehaviour
                 255);
     }
 
-    void Update()
-    {
-        StartCoroutine(FetchImage());
-    }
 }

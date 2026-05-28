@@ -43,7 +43,12 @@ public class FlaskManager : MonoBehaviour
         heightSlider = pendulumHeightController.GetComponent<SliderTextDisplay>();
 
         StartCoroutine(postLoop());
-    }   
+    }
+
+    void OnDestroy()
+    {
+        StopAllCoroutines();
+    }
 
     private IEnumerator postLoop() 
     {

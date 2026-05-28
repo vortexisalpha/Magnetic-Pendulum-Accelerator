@@ -50,6 +50,11 @@ public class MagnetRenderer : MonoBehaviour
         StartCoroutine(PollLoop());
     }
 
+    void OnDestroy()
+    {
+        StopAllCoroutines();
+    }
+
     IEnumerator PollLoop()
     {
         var wait = new WaitForSeconds(pollIntervalSeconds);
