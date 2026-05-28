@@ -85,7 +85,6 @@ def ping():
 def info():
     return construct_mpdata_json(mp_data)
 
-
 @app.route("/magnet_add", methods=["POST"])
 def magnet_add():
     body = request.get_json()
@@ -163,6 +162,7 @@ def image_get():
         "bitDepth": 14,
         "image": mp_data.image,
     }
+
 
 if __name__ == "__main__":
     app.run(debug=True)
