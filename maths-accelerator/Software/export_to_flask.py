@@ -9,7 +9,7 @@ W, H = 160, 120
 BIT_DEPTH = 14
 ITER_MASK = 0xFFF          # bottom 12 bits
 CATEGORY_SHIFT = 12        # top 2 bits
-FLASK_BASE = "http://35.179.111.223:5000/"
+FLASK_BASE = "http://35.179.111.223:5000"
 OUT_DIR = Path("cpp_outputs")
 
 # Matches DEFAULT_MAGNETS in cpu_fixedpoint.cpp (physical x, y)
