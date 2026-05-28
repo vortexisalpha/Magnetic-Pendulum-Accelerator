@@ -36,6 +36,28 @@ public class PendulumRenderer : MonoBehaviour
     private Color32[] vertColors3D;
     private int[] tris3D;
 
+    // FPGA 6-bit pixel: {step_category[3:0], magnet_id[1:0]}
+    // Simulation 14-bit pixel: {category[1:0], iterations[11:0]}
+    static void DecodePixel(int pixel, int bitDepth, out int category, out int depth)
+    {
+        if (bitDepth <= 6)
+        {
+            category = pixel & 0x3;
+            depth = (pixel >> 2) & 0xF;
+        }
+        else
+        {
+            category = (pixel >> 12) & 0x3;
+            depth = pixel & 0xFFF;
+        }
+    }
+
+    static int DepthMax(int bitDepth) =>
+        bitDepth <= 6 ? 15 : ((1 << (bitDepth - 2)) - 1);
+
+    static float DepthToWorldScale(int bitDepth, float heightScale) =>
+        bitDepth <= 6 ? heightScale * 250f : heightScale;
+
     void Start()
     {
         BuildMeshSkeleton(160, 120);
@@ -102,26 +124,26 @@ public class PendulumRenderer : MonoBehaviour
 
             var catPixels = new Color32[width * height];
             var valPixels = new Color32[width * height];
+            int depthMax = DepthMax(resp.bitDepth);
+            float depthScale = DepthToWorldScale(resp.bitDepth, heightScale);
 
             for (int y = 0; y < height; y++){
                 for (int x = 0; x < width; x++){
                     int pixel = resp.image[y][x];
 
-                    int top2 = (pixel >> (resp.bitDepth - 2)) & 0x3; // right shifted by all but 2 and then & with ...011
-                    int bottom12 = pixel & 0xFFF;
+                    DecodePixel(pixel, resp.bitDepth, out int category, out int depth);
 
                     int bufPos = (height - y - 1) * width + x; //array buffer is inverted in unity, flip y
 
-                    catPixels[bufPos] = palette[top2];
+                    catPixels[bufPos] = palette[category];
                     
-                    //calculate intensity from 0-255 for iterations
-                    byte intensity = (byte)((bottom12 * 255) / ((1 << resp.bitDepth - 2) - 1));
+                    byte intensity = (byte)((depth * 255) / depthMax);
                     valPixels[bufPos] = PlasmaColor(intensity);
 
-                    //3d:
+                    //3d: depth = step bins (FPGA) or raw iteration count (simulation)
                     int meshIdx = y * width + x;
-                    verts3D[meshIdx] = new Vector3(x * xyScale, bottom12 * heightScale, y * xyScale);
-                    vertColors3D[meshIdx] = palette[top2];
+                    verts3D[meshIdx] = new Vector3(x * xyScale, depth * depthScale, y * xyScale);
+                    vertColors3D[meshIdx] = palette[category];
                 }
             }
 
@@ -137,6 +159,7 @@ public class PendulumRenderer : MonoBehaviour
             runtimeMesh.vertices = verts3D;
             runtimeMesh.colors32 = vertColors3D;
             runtimeMesh.triangles = tris3D;
+            runtimeMesh.RecalculateNormals();
             runtimeMesh.RecalculateBounds();
         }
     }

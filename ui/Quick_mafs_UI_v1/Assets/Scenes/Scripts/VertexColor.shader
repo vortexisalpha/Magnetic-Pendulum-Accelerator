@@ -1,36 +1,46 @@
-//referance: https://github.com/Syomus/ProceduralToolkit/blob/master/Shaders/VertexColor/Unlit%20Vertex%20Color.shader
-
 Shader "Custom/VertexColor"
 {
     SubShader
     {
-        Tags { "RenderType"="Opaque" }
+        Tags
+        {
+            "RenderType" = "Opaque"
+            "RenderPipeline" = "UniversalPipeline"
+            "Queue" = "Geometry"
+        }
+
         Pass
         {
-            CGPROGRAM
+            HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            #include "UnityCG.cginc"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            struct appdata { 
-                float4 vertex : POSITION;
-                fixed4 color : COLOR;
-            };
-
-            struct v2f { 
-                float4 vertex : SV_POSITION;
-                fixed4 color : COLOR;
-            };
-
-            v2f vert (appdata v)
+            struct Attributes
             {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.color  = v.color;
-                return o;
+                float4 positionOS : POSITION;
+                float4 color : COLOR;
+            };
+
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+                float4 color : COLOR;
+            };
+
+            Varyings vert(Attributes input)
+            {
+                Varyings output;
+                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.color = input.color;
+                return output;
             }
-            fixed4 frag (v2f i) : SV_Target { return i.color; }
-            ENDCG
+
+            half4 frag(Varyings input) : SV_Target
+            {
+                return input.color;
+            }
+            ENDHLSL
         }
     }
 }

@@ -30,7 +30,7 @@ for y in range(SCREEN_SIZE_Y):
 
 resp = requests.post(
     "http://localhost:5000/image",
-    json={"image": image},
+    json={"image": image, "bitDepth": 14},
 )
 
 for i, (uid, x, y) in enumerate([
