@@ -1,6 +1,6 @@
 module settle_check_s3 #(
-    parameter W = 16,
-    parameter F = 12,
+    parameter W = 18,
+    parameter F = 14,
     parameter Q_WIDTH = 18
 )(
     input  logic clk,

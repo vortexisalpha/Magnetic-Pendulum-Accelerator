@@ -1,6 +1,6 @@
 module lane_main #(
-    parameter W = 16,
-    parameter F = 12,
+    parameter W = 18,
+    parameter F = 14,
     parameter LUT_SIZE = 4096, // 4096 entries
     parameter LUT_ADDR_W = 12, // 2^12 = 4096
     parameter Q_WIDTH = 18 // Q 7.12 representation, covers roughly -64 to 63

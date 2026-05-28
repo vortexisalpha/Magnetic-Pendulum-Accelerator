@@ -3,8 +3,8 @@
 //does a-b and puts it in c
 
 module fx_sub_two_input #(
-    parameter W = 16,
-    parameter F = 12
+    parameter W = 18,
+    parameter F = 14
 )(
     input  signed [W-1:0] a,
     input  signed [W-1:0] b,

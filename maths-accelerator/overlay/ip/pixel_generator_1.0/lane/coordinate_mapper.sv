@@ -1,8 +1,8 @@
 module coordinate_mapper #(
     parameter IMG_W = 160,
     parameter IMG_H = 120,
-    parameter W = 16,
-    parameter F = 12,
+    parameter W = 18,
+    parameter F = 14,
 
     parameter P_W = $clog2(IMG_W),
     parameter Q_W = $clog2(IMG_H),

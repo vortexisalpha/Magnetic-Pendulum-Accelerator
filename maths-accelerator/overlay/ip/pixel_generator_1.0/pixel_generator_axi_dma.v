@@ -145,7 +145,7 @@ assign s_axi_lite_bresp   = (writeAddr < REG_FILE_SIZE) ? AXI_OK : AXI_ERR;
 
 // -------------------------------------------------------------------------
 // one_lane_top
-// Register map (all Q4.12 fixed-point unless noted):
+// Register map (all Q4.14 fixed-point unless noted):
 //  [0]  control (bit[0] = start trigger)
 //  [1]  x_min        [2]  y_min
 //  [3]  x_step       [4]  y_step
@@ -167,8 +167,8 @@ reg         frame_done_latch = 1'b0;
 wire start_w = reg_file[0][0];
 
 one_lane_top #(
-    .W(16), .F(12),
-    .LUT_SIZE(1024), .LUT_ADDR_W(10),
+    .W(18), .F(14),
+    .LUT_SIZE(4096), .LUT_ADDR_W(12),
     .Q_WIDTH(18),
     .IMG_W(160), .IMG_H(120)
 ) u_one_lane_top (
@@ -176,26 +176,26 @@ one_lane_top #(
     .rst  (!periph_resetn),
     .start(start_w),
 
-    .x_min (reg_file[1][15:0]),
-    .y_min (reg_file[2][15:0]),
-    .x_step(reg_file[3][15:0]),
-    .y_step(reg_file[4][15:0]),
+    .x_min (reg_file[1][17:0]),
+    .y_min (reg_file[2][17:0]),
+    .x_step(reg_file[3][17:0]),
+    .y_step(reg_file[4][17:0]),
 
-    .mag0_x(reg_file[5][15:0]),
-    .mag0_y(reg_file[6][15:0]),
-    .mag1_x(reg_file[7][15:0]),
-    .mag1_y(reg_file[8][15:0]),
-    .mag2_x(reg_file[9][15:0]),
-    .mag2_y(reg_file[10][15:0]),
+    .mag0_x(reg_file[5][17:0]),
+    .mag0_y(reg_file[6][17:0]),
+    .mag1_x(reg_file[7][17:0]),
+    .mag1_y(reg_file[8][17:0]),
+    .mag2_x(reg_file[9][17:0]),
+    .mag2_y(reg_file[10][17:0]),
 
-    .gamma (reg_file[11][15:0]),
-    .omega2(reg_file[12][15:0]),
-    .h2    (reg_file[13][15:0]),
-    .mu    (reg_file[14][15:0]),
-    .dt    (reg_file[15][15:0]),
+    .gamma (reg_file[11][17:0]),
+    .omega2(reg_file[12][17:0]),
+    .h2    (reg_file[13][17:0]),
+    .mu    (reg_file[14][17:0]),
+    .dt    (reg_file[15][17:0]),
 
-    .r_settle_sq         (reg_file[16][15:0]),
-    .v_settle            (reg_file[17][15:0]),
+    .r_settle_sq         (reg_file[16][17:0]),
+    .v_settle            (reg_file[17][17:0]),
     .sum_r_settle_sq_h_sq(reg_file[18][17:0]),
     .consec_settle_count (reg_file[19][13:12]),
     .max_steps           (reg_file[19][11:0]),
