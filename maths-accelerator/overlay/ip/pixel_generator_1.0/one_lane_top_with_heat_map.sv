@@ -51,7 +51,7 @@ module one_lane_top #(
     always_ff @(posedge clk) begin
         if (rst || !start) begin
             scan_p      <= '0;
-            scan_q      <= IMG_H-1;
+            scan_q      <= '0;
             scan_id     <= '0;
             scan_active <= 1'b0;
         end
@@ -63,13 +63,13 @@ module one_lane_top #(
             // advance only when havent went over all the pixels and coord mapper input slot is free
             if (scan_p == IMG_W-1) begin
                 scan_p <= '0; // once reaches end of a row, start with col 0 on next row
-                if (scan_q == 0) begin
+                if (scan_q == IMG_H-1) begin
                     scan_active <= 1'b0; // all pixels emitted
-                end 
-                else begin
-                    scan_q <= scan_q - 1; // goes to next row
                 end
-            end 
+                else begin
+                    scan_q <= scan_q + 1; // goes to next row
+                end
+            end
             else begin
                 scan_p <= scan_p + 1; // goes to next col
             end
@@ -101,7 +101,7 @@ module one_lane_top #(
         .y_step(y_step),
 
         .p(scan_p),
-        .q(scan_q),
+        .q(IMG_H - 1 - scan_q),
 
         .valid_out(coord_mapper_valid_out),
         .x0(x0),
