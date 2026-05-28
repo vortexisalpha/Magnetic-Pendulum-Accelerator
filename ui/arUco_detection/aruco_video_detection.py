@@ -6,6 +6,8 @@ from time import perf_counter
 # Font used when overlaying marker IDs on the frame.
 _TEXT_FONT = cv2.FONT_HERSHEY_PLAIN
 
+
+
 BOARD_W, BOARD_H = 640, 480
 
 DST_POINTS = np.array([
@@ -83,17 +85,18 @@ def detect_markers(frame: np.ndarray, dictionary: cv2.aruco.Dictionary) -> np.nd
             x_center = ((y1-y0)+x0*m1-x1*m2)/(m1-m2)
             y_center = m1*(x_center-x0)+y0
         
-        # Int casting as pixel positions are integers, but prior rounding to increase accuracy since int casting rounds down
-        x_center_px = int(round(x_center))
-        y_center_px = int(round(y_center))
         m_id = marker_id[0]
         match m_id:
             case 0 | 1 | 2 | 3 :
-                board_corners[m_id] = [x_center_px, y_center_px]
+                board_corners[m_id] = [x_center, y_center]
             case 4 | 5 | 6:
-                detected_tokens[m_id-4] = [x_center_px, y_center_px]
+                detected_tokens[m_id-4] = [x_center, y_center]
             case _:
                 pass
+
+       # Int casting as pixel positions are integers, but prior rounding to increase accuracy since int casting rounds down
+        x_center_px = int(round(x_center))
+        y_center_px = int(round(y_center))
 
         # Annotating the center
         cv2.circle(frame, (x_center_px, y_center_px), radius=5, color=(0, 0, 255), thickness=-1)
