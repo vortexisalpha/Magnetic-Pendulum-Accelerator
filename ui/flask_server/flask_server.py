@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 import json
-from typing import Optional
 
 from flask import Flask, request
 
@@ -9,7 +8,9 @@ SCREEN_SIZE_X = 160
 SCREEN_SIZE_Y = 120
 
 FPGA_PIXEL_BIT_DEPTH = 6
-SIM_PIXEL_BIT_DEPTH = 14
+
+PHYSICAL_COORD_MIN = -1.8
+PHYSICAL_COORD_MAX = 1.8
 
 app = Flask(__name__)
 
@@ -29,38 +30,62 @@ class Grid:
     y_max: float = SCREEN_SIZE_Y
 
 
+def _ui_axis_to_physical(value, ui_min, ui_max):
+    if ui_max == ui_min:
+        return (PHYSICAL_COORD_MIN + PHYSICAL_COORD_MAX) / 2
+    t = (value - ui_min) / (ui_max - ui_min)
+    return PHYSICAL_COORD_MIN + t * (PHYSICAL_COORD_MAX - PHYSICAL_COORD_MIN)
+
+
+def ui_grid_to_physical_grid(ui_grid: Grid) -> Grid:
+    return Grid(
+        x_min=_ui_axis_to_physical(ui_grid.x_min, ui_grid.x_min, ui_grid.x_max),
+        x_max=_ui_axis_to_physical(ui_grid.x_max, ui_grid.x_min, ui_grid.x_max),
+        y_min=_ui_axis_to_physical(ui_grid.y_min, ui_grid.y_min, ui_grid.y_max),
+        y_max=_ui_axis_to_physical(ui_grid.y_max, ui_grid.y_min, ui_grid.y_max),
+    )
+
+
 def default_image() -> list[list[int]]:
     return [[0 for _ in range(SCREEN_SIZE_X)]  for _ in range(SCREEN_SIZE_Y)] 
 
 @dataclass
 class MPData:
     mag_list: list[Magnet] = field(default_factory=list)
-    grid: Grid = field(default_factory=Grid)
+    ui_grid: Grid = field(default_factory=Grid)
+    physical_grid: Grid = field(default_factory=Grid)
     magnetic_strength: float = 1
     damping_factor: float = 1
     pendulum_height: float = 1
     pendulum_length: float = 1
     image: list[list[int]] = field(default_factory=default_image)
-    image_bit_depth: int = SIM_PIXEL_BIT_DEPTH
 
 
 mp_data = MPData()
 
 
+def sync_physical_grid(data: MPData) -> None:
+    data.physical_grid = ui_grid_to_physical_grid(data.ui_grid)
+
+
+sync_physical_grid(mp_data)
+
+
 def reset_mp_data() -> None:
     mp_data.mag_list.clear()
-    mp_data.grid = Grid()
+    mp_data.ui_grid = Grid()
+    sync_physical_grid(mp_data)
     mp_data.magnetic_strength = 1
     mp_data.damping_factor = 1
     mp_data.pendulum_height = 1
     mp_data.pendulum_length = 1
-    mp_data.image_bit_depth = SIM_PIXEL_BIT_DEPTH
 
 
 def construct_mpdata_json(data: MPData) -> str:
     payload = {
         "magnets": {},
-        "grid": {},
+        "ui_grid": {},
+        "physical_grid": {},
     }
 
     for index, magnet in enumerate(data.mag_list):
@@ -69,10 +94,17 @@ def construct_mpdata_json(data: MPData) -> str:
             "y": magnet.y,
         }
 
-    payload["grid"]["x_min"] = data.grid.x_min
-    payload["grid"]["x_max"] = data.grid.x_max
-    payload["grid"]["y_min"] = data.grid.y_min
-    payload["grid"]["y_max"] = data.grid.y_max
+    sync_physical_grid(data)
+
+    payload["ui_grid"]["x_min"] = data.ui_grid.x_min
+    payload["ui_grid"]["x_max"] = data.ui_grid.x_max
+    payload["ui_grid"]["y_min"] = data.ui_grid.y_min
+    payload["ui_grid"]["y_max"] = data.ui_grid.y_max
+
+    payload["physical_grid"]["x_min"] = data.physical_grid.x_min
+    payload["physical_grid"]["x_max"] = data.physical_grid.x_max
+    payload["physical_grid"]["y_min"] = data.physical_grid.y_min
+    payload["physical_grid"]["y_max"] = data.physical_grid.y_max
 
     payload["magnetic_strength"] = data.magnetic_strength
     payload["damping_factor"] = data.damping_factor
@@ -155,33 +187,8 @@ def bytes_to_image(raw: bytes):
     return [list(raw[row * SCREEN_SIZE_X : (row + 1) * SCREEN_SIZE_X]) for row in range(SCREEN_SIZE_Y)]
 
 
-def validate_image(image: list[list[int]]) -> Optional[str]:
-    if len(image) != SCREEN_SIZE_Y:
-        return f"expected {SCREEN_SIZE_Y} rows, got {len(image)}"
-    for row in image:
-        if len(row) != SCREEN_SIZE_X:
-            return f"expected {SCREEN_SIZE_X} columns, got {len(row)}"
-    return None
-
-
 @app.route("/image", methods=["POST"])
 def image_post():
-    # JSON from export_to_flask.py / dummy_render_request.py (14-bit simulation)
-    if request.is_json:
-        body = request.get_json(silent=True) or {}
-        image = body.get("image")
-        if image is None:
-            return {"error": "missing 'image' field"}, 400
-
-        error = validate_image(image)
-        if error:
-            return {"error": error}, 400
-
-        mp_data.image = image
-        mp_data.image_bit_depth = int(body.get("bitDepth", SIM_PIXEL_BIT_DEPTH))
-        return {"ok": 200}
-
-    # Raw bytes from FPGA DMA (6-bit values, one byte per pixel)
     raw = request.get_data()
     expected = SCREEN_SIZE_X * SCREEN_SIZE_Y
     if len(raw) != expected:
@@ -190,7 +197,6 @@ def image_post():
         }, 400
 
     mp_data.image = bytes_to_image(raw)
-    mp_data.image_bit_depth = FPGA_PIXEL_BIT_DEPTH
     return {"ok": 200}
 
 @app.route("/image", methods=["GET"])
@@ -199,7 +205,7 @@ def image_get():
      return {
         "width": SCREEN_SIZE_X,
         "height": SCREEN_SIZE_Y,
-        "bitDepth": mp_data.image_bit_depth,
+        "bitDepth": FPGA_PIXEL_BIT_DEPTH,
         "image": mp_data.image,
     }
 
