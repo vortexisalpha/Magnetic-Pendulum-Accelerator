@@ -1,6 +1,6 @@
 module lut_bram #(
-    parameter W = 16,
-    parameter F = 12,
+    parameter W = 18,
+    parameter F = 14,
     parameter LUT_SIZE = 4096, // 4096 entries
     parameter LUT_ADDR_W = 12  // 2^12 = 4096
 )(
@@ -19,7 +19,8 @@ module lut_bram #(
     logic [LUT_ADDR_W-1:0] idx;
 
     //saturate address to LUT SIZE, if addr exceed LUT_SIZE, use last entry
-    assign idx = (|addr[W+1:LUT_ADDR_W+5]) ? {LUT_ADDR_W{1'b1}} : addr[LUT_ADDR_W+4:5];
+    // if bit 19 is 1, use last entry (highest idx possible), else, use bit 18 to 7
+    assign idx = (addr[W+1]) ? {LUT_ADDR_W{1'b1}} : addr[LUT_ADDR_W+6:7];
 
     always @(posedge clk) begin
         //synchronous read
