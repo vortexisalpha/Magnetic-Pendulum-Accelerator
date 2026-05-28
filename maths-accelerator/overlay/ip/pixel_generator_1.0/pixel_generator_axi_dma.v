@@ -1,15 +1,8 @@
 // pixel_generator.v — Changes from original (HDMI display version):
 //
-// REMOVED:
-//   - packer module and r/g/b inputs
-//   - x/y raster counters (X_SIZE, Y_SIZE, lastx, lasty, first)
-//   - px/py sub-pixel counters and fb_rd_addr display calculation
-//   - active_video, red, green, blue connections to one_lane_top
-//   - regfile renamed to reg_file
-//
 // ADDED:
 //   - Result readout state machine (PS_IDLE/ISSUE/COLLECT/SEND/DONE)
-//   - Triggered by frame_done from one_lane_top
+//   - triggered by frame_done_latch from one_lane_top
 //   - Reads BRAM sequentially (pixel 0..19199) after computation completes
 //   - Packs 4 results per 32-bit AXI-Stream word (1 byte per pixel)
 //   - Each byte: [5:2]=step_category, [1:0]=magnet_id, 6 bits in total
@@ -20,7 +13,6 @@
 // one_lane_top connections updated:
 //   - fb_rd_addr: driven by readout state machine
 //   - fb_rd_data: 6-bit result per pixel
-//   - frame_done: triggers readout
 
 module pixel_generator(
     input           out_stream_aclk,
@@ -79,9 +71,13 @@ reg [2:0]                 writeState = AWAIT_WADD_AND_DATA;
 
 // -------------------------------------------------------------------------
 // AXI-Lite read
+// address 20 (byte offset 0x50) -> debug for frame_done_latch
 // -------------------------------------------------------------------------
 always @(posedge s_axi_lite_aclk) begin
-    readData <= reg_file[readAddr];
+    if (readAddr == 5'd20)
+        readData <= {31'b0, frame_done_latch};
+    else
+        readData <= reg_file[readAddr];
     if (!axi_resetn) begin
         readState <= AWAIT_RADD;
     end else case (readState)
@@ -161,10 +157,12 @@ assign s_axi_lite_bresp   = (writeAddr < REG_FILE_SIZE) ? AXI_OK : AXI_ERR;
 //  [16] r_settle_sq  [17] v_settle
 //  [18] sum_r_settle_sq_h_sq [17:0]
 //  [19] {consec_settle_count[1:0]=bits[13:12], max_steps[11:0]=bits[11:0]}
+//  [20] debug: frame_done_latch
 // -------------------------------------------------------------------------
 wire [5:0]  fb_rd_data;
 wire        frame_done;
 reg  [14:0] fb_rd_addr_r;
+reg         frame_done_latch = 1'b0;
 
 wire start_w = reg_file[0][0];
 
@@ -208,9 +206,20 @@ one_lane_top #(
 );
 
 // -------------------------------------------------------------------------
+// frame_done latch
+// Set when compute completes; cleared when we go from PS_DONE→PS_IDLE
+// -------------------------------------------------------------------------
+always @(posedge out_stream_aclk) begin
+    if (!periph_resetn || !start_w)
+        frame_done_latch <= 1'b0;
+    else if (frame_done)
+        frame_done_latch <= 1'b1;
+end
+
+// -------------------------------------------------------------------------
 // Result readout state machine
 //
-// After frame_done, reads BRAM sequentially (pixel 0..19199) and streams
+// After frame_done_latch, reads BRAM and streams
 // packed 32-bit words via AXI-Stream to axi_dma S2MM channel.
 //
 // Each 32-bit word packs 4 pixel results (1 byte each, upper 2 bits zero):
@@ -262,7 +271,7 @@ always @(posedge out_stream_aclk) begin
             px_done    <= 0;
             bpos       <= 0;
             words_sent <= 0;
-            if (frame_done && start_w) begin
+            if (frame_done_latch && start_w) begin
                 fb_rd_addr_r <= 0;
                 ps           <= PS_ISSUE;
             end
@@ -298,8 +307,11 @@ always @(posedge out_stream_aclk) begin
         end
 
         PS_SEND: begin
-            // hold tvalid until tready
-            if (out_stream_tready) begin
+            if (!start_w) begin
+                out_vld_r <= 0;
+                out_lst_r <= 0;
+                ps        <= PS_IDLE;
+            end else if (out_stream_tready) begin
                 out_vld_r  <= 0;
                 out_lst_r  <= 0;
                 words_sent <= words_sent + 1;

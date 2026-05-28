@@ -49,13 +49,14 @@ module one_lane_top #(
 
     logic coord_mapper_valid_out;
     always_ff @(posedge clk) begin
-        if (rst) begin
+        if (rst || !start) begin
             scan_p      <= '0;
             scan_q      <= '0;
             scan_id     <= '0;
             scan_active <= 1'b0;
-        end 
-        else if (start && !scan_active && done_count == 0) begin
+        end
+        else if (!scan_active && done_count == 0) begin
+            // start is implicitly 1 here (else-if after rst || !start branch)
             scan_active <= 1'b1;
         end
         else if (scan_active && !new_px_pending && !coord_mapper_valid_out) begin
@@ -126,9 +127,9 @@ module one_lane_top #(
     logic new_px_consume;
 
     always_ff @(posedge clk) begin
-        if (rst) begin
+        if (rst || !start) begin
             new_px_pending <= 1'b0;
-        end 
+        end
         else begin
             if (coord_mapper_valid_out && (!new_px_pending || new_px_consume)) begin
                 // the OR deals with situation where the reg is about to be freed i.e. new_px_pending goes low next cycle,
