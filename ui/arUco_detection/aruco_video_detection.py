@@ -6,7 +6,7 @@ from time import perf_counter
 # Font used when overlaying marker IDs on the frame.
 _TEXT_FONT = cv2.FONT_HERSHEY_PLAIN
 
-BOARD_W, BOARD_H = 800, 600
+BOARD_W, BOARD_H = 640, 480
 
 DST_POINTS = np.array([
     [0,       0      ],
@@ -16,14 +16,23 @@ DST_POINTS = np.array([
 ], dtype=np.float32)
 
 
-def token_transform(board_corners: list, dstPoints: np.ndarray, detected_tokens: list) -> np.ndarray:
+def token_transform(board_corners: list, dstPoints: np.ndarray, detected_tokens: list) -> list | None:
     board_corners_f = np.array(board_corners, dtype=np.float32)
     H, status = cv2.findHomography(board_corners_f, dstPoints)
+
+    if H is None:
+        return None
+    
     token_mapped = [None, None, None]
-    for token in detected_tokens:
+    for i, token in enumerate(detected_tokens):
         if token is not None:
-            token_f = np.array([token], dtype=np.float32) # must be shape (1, 1, 2)
+            # perspectiveTransform is designed to transform batches of curves or contours
+            # hence must be shape (1, 1, 2)
+            token_f = np.array([[token]], dtype=np.float32)
             mapped = cv2.perspectiveTransform(token_f, H)
+            token_mapped[i] = mapped[0][0]
+    
+    return token_mapped
             
 
 
