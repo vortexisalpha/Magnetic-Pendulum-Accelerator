@@ -152,15 +152,15 @@ RectTransform:
   m_GameObject: {fileID: 29223941}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 1000}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_LocalScale: {x: 2.6, y: 2.6, z: 2.6}
+  m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 1201828984}
   m_Father: {fileID: 1809429740}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchorMin: {x: 1, y: 0}
+  m_AnchorMax: {x: 1, y: 0}
+  m_AnchoredPosition: {x: -404.40002, y: 64.4}
   m_SizeDelta: {x: 160, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &29223943
@@ -209,7 +209,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 1550765095}
         m_TargetAssemblyTypeName: ViewManager, Assembly-CSharp
-        m_MethodName: Show3D
+        m_MethodName: Show2D
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -690,7 +690,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Button
+  m_text: Back To 2D
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -699,7 +699,7 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4294967295
+    rgba: 4281479730
   m_fontColor: {r: 0.19607843, g: 0.19607843, b: 0.19607843, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
@@ -712,7 +712,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -802,7 +802,7 @@ MonoBehaviour:
   categoryImage: {fileID: 38845505}
   valueImage: {fileID: 1780368859}
   mesh3D: {fileID: 793402350}
-  heightScale: 0.05
+  heightScale: 0.02
   xyScale: 0.5
 --- !u!4 &1269219307
 Transform:
@@ -963,6 +963,14 @@ PrefabInstance:
     - target: {fileID: 3077228316557505813, guid: 98a7f96c4d6114e7093d70adfa68aa0d, type: 3}
       propertyPath: param
       value: Height h
+      objectReference: {fileID: 0}
+    - target: {fileID: 3077228316557505813, guid: 98a7f96c4d6114e7093d70adfa68aa0d, type: 3}
+      propertyPath: paramMax
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3077228316557505813, guid: 98a7f96c4d6114e7093d70adfa68aa0d, type: 3}
+      propertyPath: paramMin
+      value: 0.01
       objectReference: {fileID: 0}
     - target: {fileID: 3083503548436998258, guid: 98a7f96c4d6114e7093d70adfa68aa0d, type: 3}
       propertyPath: m_Pivot.x
@@ -1793,7 +1801,7 @@ Canvas:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1809429736}
-  m_Enabled: 0
+  m_Enabled: 1
   serializedVersion: 3
   m_RenderMode: 0
   m_Camera: {fileID: 0}
@@ -1804,7 +1812,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
-  m_AdditionalShaderChannelsFlag: 0
+  m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
   m_SortingOrder: 0

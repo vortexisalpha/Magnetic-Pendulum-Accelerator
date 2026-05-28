@@ -9,7 +9,7 @@ W, H = 160, 120
 BIT_DEPTH = 14
 ITER_MASK = 0xFFF          # bottom 12 bits
 CATEGORY_SHIFT = 12        # top 2 bits
-FLASK_BASE = "http://127.0.0.1:5000"
+FLASK_BASE = "http://35.179.111.223:5000/"
 OUT_DIR = Path("cpp_outputs")
 
 # Matches DEFAULT_MAGNETS in cpu_fixedpoint.cpp (physical x, y)
@@ -133,7 +133,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--flask-base",
         default=FLASK_BASE,
-        help="Flask server base URL (default: http://127.0.0.1:5000)",
+        help="Flask server base URL (default: http://35.179.111.223:5000/)",
     )
     args = parser.parse_args()
 

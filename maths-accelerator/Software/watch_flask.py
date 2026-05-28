@@ -23,7 +23,7 @@ import requests
 
 ROOT = Path(__file__).resolve().parent.parent
 BINARY = ROOT / "Software" / "cpu_fixedpoint"
-DEFAULT_FLASK = "http://127.0.0.1:5000"
+DEFAULT_FLASK = "http://35.179.111.223:5000/"
 
 PARAM_KEYS = (
     "magnetic_strength",

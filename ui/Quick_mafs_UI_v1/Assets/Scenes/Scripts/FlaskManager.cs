@@ -35,7 +35,7 @@ public class FlaskManager : MonoBehaviour
     //on start, establish url and coroutine (async function)
     void Start()
     {
-        URL = "http://127.0.0.1:5000/" + endpoint;
+        URL = "http://35.179.111.223:5000/" + endpoint;
 
         dampingSlider = dampingFactorController.GetComponent<SliderTextDisplay>();
         magneticSlider = magneticStrengthController.GetComponent<SliderTextDisplay>();

@@ -70,7 +70,7 @@ public class PendulumRenderer : MonoBehaviour
 
     IEnumerator FetchImage()
     {
-        using (var req = UnityWebRequest.Get("http://127.0.0.1:5000/image"))
+        using (var req = UnityWebRequest.Get("http://35.179.111.223:5000/image"))
         {
             yield return req.SendWebRequest();
             if (req.result != UnityWebRequest.Result.Success) yield break;

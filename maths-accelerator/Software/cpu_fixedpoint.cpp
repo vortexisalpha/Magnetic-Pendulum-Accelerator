@@ -906,7 +906,7 @@ struct Args {
     // OutputParams
     std::string out_dir = "cpp_outputs";
     // Flask integration
-    std::string flask_base = "http://127.0.0.1:5000";
+    std::string flask_base = "http://35.179.111.223:5000/";
     bool        use_flask  = true;
 };
 

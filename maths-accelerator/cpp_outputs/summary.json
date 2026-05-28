@@ -1,0 +1,38 @@
+{
+  "fixed_format": {
+    "total_bits": 16,
+    "frac_bits": 12,
+    "format_name": "Q3.12"
+  },
+  "physics": {
+    "gamma":  0.374851,
+    "omega2": 0.520492,
+    "h2":     0.369197,
+    "mu":     4.05503,
+    "dt":     0.01
+  },
+  "simulation": {
+    "max_steps":  4095,
+    "r_settle":   0.3,
+    "v_settle":   0.05,
+    "min_consec": 3,
+    "force_mode": "lut-force"
+  },
+  "render": {
+    "width":  160,
+    "height": 120,
+    "x_min":  -1.8,
+    "x_max":  1.8,
+    "y_min":  -1.8,
+    "y_max":  1.8
+  },
+  "results": {
+    "elapsed_s":              0.989967,
+    "pixels":                 19200,
+    "pixels_per_second":      19394.6,
+    "mean_steps":             994.384,
+    "p99_steps":              1623,
+    "strict_settled_pixels":  19193,
+    "strict_settled_fraction":0.999635
+  }
+}
