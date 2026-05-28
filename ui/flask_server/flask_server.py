@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 import json
+from typing import Optional
 
 from flask import Flask, request
 
@@ -154,7 +155,7 @@ def bytes_to_image(raw: bytes):
     return [list(raw[row * SCREEN_SIZE_X : (row + 1) * SCREEN_SIZE_X]) for row in range(SCREEN_SIZE_Y)]
 
 
-def validate_image(image: list[list[int]]) -> str | None:
+def validate_image(image: list[list[int]]) -> Optional[str]:
     if len(image) != SCREEN_SIZE_Y:
         return f"expected {SCREEN_SIZE_Y} rows, got {len(image)}"
     for row in image:
