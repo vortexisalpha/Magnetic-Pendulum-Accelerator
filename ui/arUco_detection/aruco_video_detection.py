@@ -6,54 +6,58 @@ from time import perf_counter
 # Font used when overlaying marker IDs on the frame.
 _TEXT_FONT = cv2.FONT_HERSHEY_PLAIN
 
+ARUCO_DICT_NAME = cv2.aruco.DICT_4X4_50
 
-
-BOARD_W, BOARD_H = 640, 480
+BOARD_CORNER_VAL = 1.8
 
 DST_POINTS = np.array([
-    [0,       0      ],
-    [BOARD_W, 0      ],
-    [BOARD_W, BOARD_H],
-    [0,       BOARD_H]
+    [-BOARD_CORNER_VAL, BOARD_CORNER_VAL],
+    [BOARD_CORNER_VAL, BOARD_CORNER_VAL],
+    [BOARD_CORNER_VAL, -BOARD_CORNER_VAL],
+    [-BOARD_CORNER_VAL, -BOARD_CORNER_VAL]
+], dtype=np.float32)
+
+# Additional image output to show homography mapping
+WARPED_SIZE = 400
+
+# We will use cv2.warpPerspective(), which maps to output image pixel coordinates, so they MUST be integers and positive
+DST_IMSHOW = np.array([
+    [0, 0],
+    [WARPED_SIZE, 0],
+    [WARPED_SIZE, WARPED_SIZE],
+    [0, WARPED_SIZE]
 ], dtype=np.float32)
 
 
-def token_transform(board_corners: list, dstPoints: np.ndarray, detected_tokens: list) -> list | None:
-    board_corners_f = np.array(board_corners, dtype=np.float32)
-    H, status = cv2.findHomography(board_corners_f, dstPoints)
+def token_transform(detected_tokens: list, H_sim: np.ndarray) -> list | None:
 
-    if H is None:
-        return None
-    
     token_mapped = [None, None, None]
     for i, token in enumerate(detected_tokens):
         if token is not None:
             # perspectiveTransform is designed to transform batches of curves or contours
             # hence must be shape (1, 1, 2)
             token_f = np.array([[token]], dtype=np.float32)
-            mapped = cv2.perspectiveTransform(token_f, H)
+            mapped = cv2.perspectiveTransform(token_f, H_sim)
             token_mapped[i] = mapped[0][0]
-    
+
     return token_mapped
-            
 
-
-
-def detect_markers(frame: np.ndarray, dictionary: cv2.aruco.Dictionary) -> np.ndarray:
+# Need to decompose!
+def detect_markers(frame: np.ndarray, detector: cv2.aruco.ArucoDetector) -> np.ndarray | None:
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    params = cv2.aruco.DetectorParameters()
-    detector = cv2.aruco.ArucoDetector(dictionary, params)
     corners, marker_ids, _ = detector.detectMarkers(gray)
 
     # No markers detected — nothing to draw.
     if not corners:
         return frame
     
+    # Draw markers on frame
     cv2.aruco.drawDetectedMarkers(frame, corners, marker_ids)
 
+    # Iterates through all detected markers and finds their centers
     board_corners = [None, None, None, None]
     detected_tokens = [None, None, None]
-    # Iterates through all detected markers and finds their centers
+
     for marker_id, single_marker_corners in zip(marker_ids, corners):
         x0, y0 = single_marker_corners[0][0]
         x1, y1 = single_marker_corners[0][1]
@@ -101,10 +105,18 @@ def detect_markers(frame: np.ndarray, dictionary: cv2.aruco.Dictionary) -> np.nd
         # Annotating the center
         cv2.circle(frame, (x_center_px, y_center_px), radius=5, color=(0, 0, 255), thickness=-1)
 
-    # SAFE HANDLING METHOD PENDING!
-    #if None not in board_corners:
+    # Use detected board corners to do homography mapping, only when all 4 corners are present
+    if None not in board_corners:
+        board_corners_f = np.array(board_corners, dtype = np.float32)
+        H_sim, _  = cv2.findHomography(board_corners_f, DST_POINTS)
+        H_view, _ = cv2.findHomography(board_corners_f, DST_IMSHOW)
 
-    return frame
+        token_mapped = token_transform(detected_tokens, H_sim)
+        print(token_mapped)
+        return cv2.warpPerspective(frame.copy(), H_view, (WARPED_SIZE, WARPED_SIZE))
+    else:
+        print("Not all corners detected!")
+        return frame
 
 
 def annotate_fps(frame: np.ndarray, fps: float) -> None:
@@ -125,10 +137,12 @@ def annotate_fps(frame: np.ndarray, fps: float) -> None:
 
 def stream_webcam_with_aruco(
     camera_index: int = 0,
-    window_name: str = "ArUco Webcam Stream",
-    aruco_dict_name: int = cv2.aruco.DICT_4X4_50,
+    window_name_1: str = "ArUco Webcam Stream",
+    window_name_2: str = "Warped Webcam Stream",
 ) -> None:
-    dictionary = cv2.aruco.getPredefinedDictionary(aruco_dict_name)
+    dictionary = cv2.aruco.getPredefinedDictionary(ARUCO_DICT_NAME)
+    params = cv2.aruco.DetectorParameters()
+    detector = cv2.aruco.ArucoDetector(dictionary, params)
 
     cap = cv2.VideoCapture(camera_index)
     if not cap.isOpened():
@@ -146,10 +160,11 @@ def stream_webcam_with_aruco(
             now = perf_counter()
             fps = 1.0/(now-prev_time)
             prev_time = now
-
-            detect_markers(frame, dictionary)
+            
+            warped_frame = detect_markers(frame, detector)
             annotate_fps(frame, fps)
-            cv2.imshow(window_name, frame)
+            cv2.imshow(window_name_1, frame)
+            cv2.imshow(window_name_2, warped_frame)
 
             # waitKey(1) yields the GUI thread; mask to handle high bits on some OSes.
             key = cv2.waitKey(1) & 0xFF
