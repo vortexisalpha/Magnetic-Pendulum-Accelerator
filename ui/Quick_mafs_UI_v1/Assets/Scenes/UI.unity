@@ -804,6 +804,7 @@ MonoBehaviour:
   mesh3D: {fileID: 793402350}
   heightScale: 0.02
   xyScale: 0.5
+  pollIntervalSeconds: 0.5
 --- !u!4 &1269219307
 Transform:
   m_ObjectHideFlags: 0
@@ -1066,7 +1067,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5152019813272971238, guid: 98a7f96c4d6114e7093d70adfa68aa0d, type: 3}
       propertyPath: m_Value
-      value: 0
+      value: 0.1
+      objectReference: {fileID: 0}
+    - target: {fileID: 5152019813272971238, guid: 98a7f96c4d6114e7093d70adfa68aa0d, type: 3}
+      propertyPath: m_MaxValue
+      value: 0.55
+      objectReference: {fileID: 0}
+    - target: {fileID: 5152019813272971238, guid: 98a7f96c4d6114e7093d70adfa68aa0d, type: 3}
+      propertyPath: m_MinValue
+      value: 0.1
       objectReference: {fileID: 0}
     - target: {fileID: 5152019813272971238, guid: 98a7f96c4d6114e7093d70adfa68aa0d, type: 3}
       propertyPath: m_OnValueChanged.m_PersistentCalls.m_Calls.Array.data[0].m_MethodName

@@ -28,7 +28,7 @@ public class PendulumRenderer : MonoBehaviour
     //3D stuff:
     [SerializeField] private MeshFilter mesh3D;
     [SerializeField] private float heightScale = 0.05f;  // iterations (height)
-    [SerializeField] private float xyScale     = 0.5f;   // pixel (spacing)
+    [SerializeField] private float xyScale = 0.5f;   // pixel (spacing)
     [SerializeField] private float pollIntervalSeconds = 0.5f;
 
     private Mesh runtimeMesh;
