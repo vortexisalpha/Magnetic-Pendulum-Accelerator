@@ -7,6 +7,8 @@ from flask import Flask, request
 SCREEN_SIZE_X = 160
 SCREEN_SIZE_Y = 120
 
+FPGA_PIXEL_BIT_DEPTH = 6
+
 app = Flask(__name__)
 
 
@@ -145,12 +147,20 @@ def controller_data():
     return {"ok": 200}
 
 
+def bytes_to_image(raw: bytes):
+    return [list(raw[row * SCREEN_SIZE_X : (row + 1) * SCREEN_SIZE_X]) for row in range(SCREEN_SIZE_Y)]
+
+
 @app.route("/image", methods=["POST"])
 def image_post():
-    body = request.get_json()
+    raw = request.get_data()
+    expected = SCREEN_SIZE_X * SCREEN_SIZE_Y
+    if len(raw) != expected:
+        return {
+            "error": f"expected {expected} bytes, got {len(raw)}",
+        }, 400
 
-    mp_data.image = body["image"]
-
+    mp_data.image = bytes_to_image(raw)
     return {"ok": 200}
 
 @app.route("/image", methods=["GET"])
@@ -159,7 +169,7 @@ def image_get():
      return {
         "width": SCREEN_SIZE_X,
         "height": SCREEN_SIZE_Y,
-        "bitDepth": 14,
+        "bitDepth": FPGA_PIXEL_BIT_DEPTH,
         "image": mp_data.image,
     }
 
