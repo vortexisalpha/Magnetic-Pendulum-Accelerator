@@ -115,7 +115,7 @@ public class PendulumRenderer : MonoBehaviour
                     catPixels[bufPos] = palette[top2];
                     
                     //calculate intensity from 0-255 for iterations
-                    byte intensity = (byte)((bottom12 * 255) / 4095);
+                    byte intensity = (byte)((bottom12 * 255) / ((1 << resp.bitDepth - 2) - 1));
                     valPixels[bufPos] = PlasmaColor(intensity);
 
                     //3d:
