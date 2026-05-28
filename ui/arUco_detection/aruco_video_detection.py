@@ -6,6 +6,27 @@ from time import perf_counter
 # Font used when overlaying marker IDs on the frame.
 _TEXT_FONT = cv2.FONT_HERSHEY_PLAIN
 
+BOARD_W, BOARD_H = 800, 600
+
+DST_POINTS = np.array([
+    [0,       0      ],
+    [BOARD_W, 0      ],
+    [BOARD_W, BOARD_H],
+    [0,       BOARD_H]
+], dtype=np.float32)
+
+
+def token_transform(board_corners: list, dstPoints: np.ndarray, detected_tokens: list) -> np.ndarray:
+    board_corners_f = np.array(board_corners, dtype=np.float32)
+    H, status = cv2.findHomography(board_corners_f, dstPoints)
+    token_mapped = [None, None, None]
+    for token in detected_tokens:
+        if token is not None:
+            token_f = np.array([token], dtype=np.float32) # must be shape (1, 1, 2)
+            mapped = cv2.perspectiveTransform(token_f, H)
+            
+
+
 
 def detect_markers(frame: np.ndarray, dictionary: cv2.aruco.Dictionary) -> np.ndarray:
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -20,7 +41,7 @@ def detect_markers(frame: np.ndarray, dictionary: cv2.aruco.Dictionary) -> np.nd
     cv2.aruco.drawDetectedMarkers(frame, corners, marker_ids)
 
     board_corners = [None, None, None, None]
-    detected_tokens = []
+    detected_tokens = [None, None, None]
     # Iterates through all detected markers and finds their centers
     for marker_id, single_marker_corners in zip(marker_ids, corners):
         x0, y0 = single_marker_corners[0][0]
@@ -56,16 +77,20 @@ def detect_markers(frame: np.ndarray, dictionary: cv2.aruco.Dictionary) -> np.nd
         # Int casting as pixel positions are integers, but prior rounding to increase accuracy since int casting rounds down
         x_center_px = int(round(x_center))
         y_center_px = int(round(y_center))
-        id = marker_id[0]
-        match id:
+        m_id = marker_id[0]
+        match m_id:
             case 0 | 1 | 2 | 3 :
-                board_corners[id] = [x_center_px, y_center_px]
+                board_corners[m_id] = [x_center_px, y_center_px]
+            case 4 | 5 | 6:
+                detected_tokens[m_id-4] = [x_center_px, y_center_px]
             case _:
-                pass # Magnet token detected, handle separately
+                pass
 
         # Annotating the center
-
         cv2.circle(frame, (x_center_px, y_center_px), radius=5, color=(0, 0, 255), thickness=-1)
+
+    # SAFE HANDLING METHOD PENDING!
+    #if None not in board_corners:
 
     return frame
 
