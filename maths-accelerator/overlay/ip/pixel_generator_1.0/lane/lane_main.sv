@@ -3,7 +3,8 @@ module lane_main #(
     parameter F = 14,
     parameter LUT_SIZE = 4096, // 4096 entries
     parameter LUT_ADDR_W = 12, // 2^12 = 4096
-    parameter Q_WIDTH = 18 // Q 7.12 representation, covers roughly -64 to 63
+    parameter Q_WIDTH = 18 // 0 to 26.2225 and everything else must be fractional.
+    //therefore for q width use Q 5.13 implementation. unsigned
 )(
     input clk,
     input rst,

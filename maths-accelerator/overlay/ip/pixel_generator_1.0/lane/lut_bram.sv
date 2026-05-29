@@ -6,7 +6,7 @@ module lut_bram #(
 )(
     input clk,
     input rst,
-    input logic [W+1:0] addr,
+    input logic [17:0] addr,
     output logic signed [W-1:0] data_out
 );
 
@@ -18,9 +18,8 @@ module lut_bram #(
     end
     logic [LUT_ADDR_W-1:0] idx;
 
-    //saturate address to LUT SIZE, if addr exceed LUT_SIZE, use last entry
-    // if bit 19 is 1, use last entry (highest idx possible), else, use bit 18 to 7
-    assign idx = (addr[W+1]) ? {LUT_ADDR_W{1'b1}} : addr[LUT_ADDR_W+6:7];
+    // addr[17:6] gives 12-bit index covering q_real in [0, 32)
+    assign idx = addr[LUT_ADDR_W+5:6];
 
     always @(posedge clk) begin
         //synchronous read
