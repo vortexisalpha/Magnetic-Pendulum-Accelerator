@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 
 [System.Serializable]
-public class ControlData 
+public class ControlData
 {
     public float dampingFactor;
     public float magneticStrength;
@@ -13,7 +13,7 @@ public class ControlData
 }
 
 public class FlaskManager : MonoBehaviour
-{   
+{
     private string endpoint = "controller_data";
     private string URL;
 
@@ -22,8 +22,8 @@ public class FlaskManager : MonoBehaviour
     [SerializeField] GameObject lengthController;
     [SerializeField] GameObject pendulumHeightController;
 
-    [SerializeField] private float postInterval = 0.1f; 
-    
+    [SerializeField] private float postInterval = 0.1f;
+
     //must serialize feild on gameobjects so cast to sliders to receive display values
     private SliderTextDisplay dampingSlider;
     private SliderTextDisplay magneticSlider;
@@ -31,7 +31,7 @@ public class FlaskManager : MonoBehaviour
     private SliderTextDisplay heightSlider;
 
     private ControlData data = new ControlData();
-    
+
     //on start, establish url and coroutine (async function)
     void Start()
     {
@@ -50,9 +50,9 @@ public class FlaskManager : MonoBehaviour
         StopAllCoroutines();
     }
 
-    private IEnumerator postLoop() 
+    private IEnumerator postLoop()
     {
-        while (true) 
+        while (true)
         {
             string json = compileJson();
 
@@ -62,7 +62,7 @@ public class FlaskManager : MonoBehaviour
         }
     }
 
-    private IEnumerator PostJson(string json) 
+    private IEnumerator PostJson(string json)
     {
         //initialise raw byte array to be sent as json in post req
         byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
@@ -79,7 +79,7 @@ public class FlaskManager : MonoBehaviour
         }
     }
 
-    private string compileJson() 
+    private string compileJson()
     {
         data.dampingFactor = dampingSlider.displayValue;
         data.magneticStrength = magneticSlider.displayValue;

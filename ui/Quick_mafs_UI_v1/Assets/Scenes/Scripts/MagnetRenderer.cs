@@ -23,6 +23,7 @@ public class MagnetRenderer : MonoBehaviour
     [SerializeField] private RawImage miniDisplay;
     [SerializeField] private float pollIntervalSeconds = 0.5f;
     [SerializeField] private int magnetRadius = 4;
+    [SerializeField] private string flaskURL = "http://35.179.111.223:5000/";
 
     private const int W = 160;
     private const int H = 120;
@@ -67,7 +68,7 @@ public class MagnetRenderer : MonoBehaviour
 
     IEnumerator FetchInfo()
     {
-        using (var req = UnityWebRequest.Get("http://localhost:5000/info"))
+        using (var req = UnityWebRequest.Get(flaskURL + "info"))
         {
             yield return req.SendWebRequest();
             if (req.result != UnityWebRequest.Result.Success) yield break;
@@ -103,8 +104,10 @@ public class MagnetRenderer : MonoBehaviour
     {
         int r2 = r * r;
         //loop over +- delta x and +- delta y and draw if not out of bounds and not greater than r^2 (pythag)
-        for (int dy = -r; dy <= r; dy++){
-            for (int dx = -r; dx <= r; dx++){
+        for (int dy = -r; dy <= r; dy++)
+        {
+            for (int dx = -r; dx <= r; dx++)
+            {
                 if (dx * dx + dy * dy > r2) continue;
                 int x = cx + dx;
                 int y = cy + dy;

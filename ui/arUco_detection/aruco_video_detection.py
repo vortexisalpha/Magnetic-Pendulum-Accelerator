@@ -2,6 +2,7 @@ import sys
 import cv2
 import numpy as np
 from time import perf_counter
+import requests
 
 # Font used when overlaying marker IDs on the frame.
 _TEXT_FONT = cv2.FONT_HERSHEY_PLAIN
@@ -19,7 +20,6 @@ DST_POINTS = np.array([
 
 # Additional image output to show homography mapping
 WARPED_SIZE = 400
-
 # We will use cv2.warpPerspective(), which maps to output image pixel coordinates, so they MUST be integers and positive
 DST_IMSHOW = np.array([
     [0, 0],
@@ -29,25 +29,46 @@ DST_IMSHOW = np.array([
 ], dtype=np.float32)
 
 
-def token_transform(detected_tokens_pos: list, H_sim: np.ndarray) -> list:
+###
+# ADD/REMOVE MAGNET NOT AVAILABLE YET, THEREFORE PRE-ADD 3 MAGNETS WITH DEFAULT POSITION
+# ALL 3 MAGNETS MUST BE ALWAYS IN FRAME AND DETECTED, THEREFORE IF NONE -> DEFAULT
+mag_4 = {"uid": "marker_0", "x": 1.0, "y": 0.0}
+mag_5 = {"uid": "marker_1", "x": -0.5, "y": 0.866}
+mag_6 = {"uid": "marker_2", "x": -0.5,  "y": -0.866}
+fixed_3_mag = [mag_4, mag_5, mag_6]
 
-    mapped_tokens_pos = [None, None, None]
-    for i, token in enumerate(detected_tokens_pos):
+# Updates the position of a detected magnet, if not detected, we set back to default
+def magnet_update_position(mapped_mags_pos: list) -> None:
+    for i, mag in enumerate(mapped_mags_pos):
+        default_mag = fixed_3_mag[i].copy() #otherwise, passed by reference, changes defaults
+        if mag is not None:
+            default_mag["x"] = mag[0]
+            default_mag["y"] = mag[1]
+            response = requests.post('http://35.179.111.223:5000/magnet_update_position', json = default_mag)
+        else:
+            response = requests.post('http://35.179.111.223:5000/magnet_update_position', json = default_mag)
+###
+
+
+def token_transform(detected_mags_pos: list, H_sim: np.ndarray) -> list:
+
+    mapped_mags_pos = [None, None, None]
+    for i, token in enumerate(detected_mags_pos):
         if token is not None:
             # perspectiveTransform is designed to transform batches of curves or contours
             # hence must be shape (1, 1, 2)
             token_f = np.array([[token]], dtype=np.float32)
             mapped = cv2.perspectiveTransform(token_f, H_sim)
-            mapped_tokens_pos[i] = mapped[0][0]
+            mapped_mags_pos[i] = mapped[0][0]
 
-    print(type(mapped_tokens_pos))
-    return mapped_tokens_pos
+    print(type(mapped_mags_pos))
+    return mapped_mags_pos
 
-def annotate_mapped_token_pos(frame: np.ndarray, detected_tokens_pos: list, mapped_tokens_pos: list) -> None:
-    for i, detected_pos in enumerate(detected_tokens_pos):
+def annotate_mapped_mags_pos(frame: np.ndarray, detected_mags_pos: list, mapped_mags_pos: list) -> None:
+    for i, detected_pos in enumerate(detected_mags_pos):
         if detected_pos is not None:
             detected_pos_np = np.array(detected_pos, dtype=np.float32)
-            cv2.putText(frame, f"ID {i+4}: {str(mapped_tokens_pos[i])}", np.round(detected_pos_np).astype(int), _TEXT_FONT, 4, (0, 255, 0), thickness = 2)
+            cv2.putText(frame, f"ID {i+4}: {str(mapped_mags_pos[i])}", np.round(detected_pos_np).astype(int), _TEXT_FONT, 4, (0, 255, 0), thickness = 2)
 
 
 # Need to decompose! Also, implicitly mutating frame while also returning a new warped frame seems unconventional
@@ -64,7 +85,7 @@ def detect_markers(frame: np.ndarray, detector: cv2.aruco.ArucoDetector) -> np.n
 
     # Iterates through all detected markers and finds their centers
     board_corners_pos = [None, None, None, None]
-    detected_tokens_pos = [None, None, None]
+    detected_mags_pos = [None, None, None]
 
     for marker_id, single_marker_corners in zip(marker_ids, corners):
         x0, y0 = single_marker_corners[0][0]
@@ -102,7 +123,7 @@ def detect_markers(frame: np.ndarray, detector: cv2.aruco.ArucoDetector) -> np.n
             case 0 | 1 | 2 | 3 :
                 board_corners_pos[m_id] = [x_center, y_center]
             case 4 | 5 | 6:
-                detected_tokens_pos[m_id-4] = [x_center, y_center]
+                detected_mags_pos[m_id-4] = [x_center, y_center]
             case _:
                 pass
 
@@ -119,9 +140,10 @@ def detect_markers(frame: np.ndarray, detector: cv2.aruco.ArucoDetector) -> np.n
         H_sim, _  = cv2.findHomography(board_corners_f, DST_POINTS)
         H_view, _ = cv2.findHomography(board_corners_f, DST_IMSHOW)
 
-        mapped_tokens_pos = token_transform(detected_tokens_pos, H_sim)
-        annotate_mapped_token_pos(frame, detected_tokens_pos, mapped_tokens_pos)
-        print(mapped_tokens_pos)
+        mapped_mags_pos = token_transform(detected_mags_pos, H_sim)
+        annotate_mapped_mags_pos(frame, detected_mags_pos, mapped_mags_pos)
+        print(mapped_mags_pos)
+
         return cv2.warpPerspective(frame.copy(), H_view, (WARPED_SIZE, WARPED_SIZE))
     else:
         print("Not all corners detected! Homography not possible, can't map detected token positions to top-down square view")
@@ -152,6 +174,21 @@ def stream_webcam_with_aruco(
     dictionary = cv2.aruco.getPredefinedDictionary(ARUCO_DICT_NAME)
     params = cv2.aruco.DetectorParameters()
     detector = cv2.aruco.ArucoDetector(dictionary, params)
+
+    # Pre-add 3 magnets, 3 trials for each, otherwise error
+    ###
+    for mag in fixed_3_mag:
+        i = 0
+        status_success = False
+        while(i<3):
+            i += 1
+            response = requests.post('http://35.179.111.223:5000/magnet_add', json = mag)
+            if response.status_code == 200:
+                status_success = True
+                break
+        # Distinguish between failed POST exiting final iteration and success
+        if(not status_success): raise RuntimeError(f"Pre-adding {mag["uid"]} failed")
+    ###
 
     cap = cv2.VideoCapture(camera_index)
     if not cap.isOpened():
