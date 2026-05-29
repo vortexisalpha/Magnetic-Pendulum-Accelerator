@@ -6,7 +6,8 @@ public class ViewManager : MonoBehaviour
     [SerializeField] private GameObject canvas3DOverlay;
     [SerializeField] private OrbitCamera orbitCamera;
 
-    void Start() { 
+    void Start()
+    {
         Show2D();
     }
 
