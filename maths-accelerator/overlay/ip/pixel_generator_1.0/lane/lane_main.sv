@@ -604,7 +604,7 @@ fx_mul #(.W(W), .F(F)) m_omega2_pos_y (.clk(clk),.rst(rst),.a(omega2), .b(s5b_y)
 
 always @(posedge clk) begin
     if (rst) begin
-        s5b_valid <= 0;
+        s6a_valid <= 0;
     end
     else begin
         s6a_valid <= s5b_valid;
@@ -640,6 +640,9 @@ logic [14:0] s6b_id;
 logic s6b_valid;
 logic [1:0] s6b_magnet_id;
 logic [1:0] s6b_settle_count;
+logic signed [W-1:0] s6b_dx_invq_sum, s6b_dy_invq_sum;
+logic signed [W-1:0] s6b_gamma_vel_x, s6b_gamma_vel_y;
+logic signed [W-1:0] s6b_omega2_pos_x, s6b_omega2_pos_y;
 
 always @(posedge clk) begin
     if (rst) begin
@@ -687,8 +690,8 @@ logic signed [W-1:0] s6c_omega2_pos_x, s6c_omega2_pos_y;
 logic [W-1:0] mu_dx_invq_w, mu_dy_invq_w;
 logic [W-1:0] mu_dx_invq, mu_dy_invq;
 
-fx_mul #(.W(W), .F(F)) m_mu_dx_invq (.clk(clk),.rst(rst),.a(mu), .b(s6a_dx_invq_sum), .c(mu_dx_invq_w));
-fx_mul #(.W(W), .F(F)) m_mu_dy_invq (.clk(clk),.rst(rst),.a(mu), .b(s6a_dy_invq_sum), .c(mu_dy_invq_w));
+fx_mul #(.W(W), .F(F)) m_mu_dx_invq (.clk(clk),.rst(rst),.a(mu), .b(s6b_dx_invq_sum), .c(mu_dx_invq_w));
+fx_mul #(.W(W), .F(F)) m_mu_dy_invq (.clk(clk),.rst(rst),.a(mu), .b(s6b_dy_invq_sum), .c(mu_dy_invq_w));
 
 
 always @(posedge clk) begin
@@ -754,42 +757,43 @@ always @(posedge clk) begin
 end
 
 //========================================================================================
-//            S6c: subtract mu_dx/dy_invq_w with gamma_vel and omega2_pos
+//            S6e: subtract mu_dx/dy_invq with gamma_vel and omega2_pos
 //========================================================================================
 //outputs
-logic signed [W-1:0] s6c_x, s6c_y, s6c_vx, s6c_vy;
-logic [11:0] s6c_step_cnt;
-logic [14:0] s6c_id;
-logic s6c_valid;
-logic [1:0] s6c_magnet_id;
+logic signed [W-1:0] s6e_x, s6e_y, s6e_vx, s6e_vy;
+logic [11:0] s6e_step_cnt;
+logic [14:0] s6e_id;
+logic s6e_valid;
+logic [1:0] s6e_magnet_id;
 
-logic [1:0] s6c_settle_count;
+logic [1:0] s6e_settle_count;
 
-logic signed [W-1:0] s6c_ax, s6c_ay;
-logic signed [W-1:0] s6c_ax_w, s6c_ay_w;
+logic signed [W-1:0] s6e_ax, s6e_ay;
+logic signed [W-1:0] s6e_ax_w, s6e_ay_w;
 
-fx_sub_three_input #(.W(W), .F(F)) s6c_ax_subtractor (.a(mu_dx_invq), .b(s6b_gamma_vel_x), .c(s6b_omega2_pos_x), .d(s6c_ax_w));
-fx_sub_three_input #(.W(W), .F(F)) s6c_ay_subtractor (.a(mu_dy_invq), .b(s6b_gamma_vel_y), .c(s6b_omega2_pos_y), .d(s6c_ay_w));
+// mu_dx_invq and s6d_gamma/omega2 all reflect the same generation of s5b data (4 cycles delayed)
+fx_sub_three_input #(.W(W), .F(F)) s6e_ax_subtractor (.a(mu_dx_invq), .b(s6d_gamma_vel_x), .c(s6d_omega2_pos_x), .d(s6e_ax_w));
+fx_sub_three_input #(.W(W), .F(F)) s6e_ay_subtractor (.a(mu_dy_invq), .b(s6d_gamma_vel_y), .c(s6d_omega2_pos_y), .d(s6e_ay_w));
 
 always @(posedge clk) begin
     if (rst) begin
-        s6c_valid <= 0;
+        s6e_valid <= 0;
     end
     else begin
         //pass through values
-        s6c_valid <= s6b_valid;
-        s6c_x <= s6b_x;
-        s6c_y <= s6b_y;
-        s6c_vx <= s6b_vx;
-        s6c_vy <= s6b_vy;
-        s6c_step_cnt <= s6b_step_cnt;
-        s6c_id <= s6b_id;
-        s6c_settle_count <= s6b_settle_count;
-        s6c_magnet_id <= s6b_magnet_id;
+        s6e_valid <= s6d_valid;
+        s6e_x <= s6d_x;
+        s6e_y <= s6d_y;
+        s6e_vx <= s6d_vx;
+        s6e_vy <= s6d_vy;
+        s6e_step_cnt <= s6d_step_cnt;
+        s6e_id <= s6d_id;
+        s6e_settle_count <= s6d_settle_count;
+        s6e_magnet_id <= s6d_magnet_id;
 
         //register ax and ay for pipeline alignment
-        s6c_ax <= s6c_ax_w;
-        s6c_ay <= s6c_ay_w;
+        s6e_ax <= s6e_ax_w;
+        s6e_ay <= s6e_ay_w;
     end
 end
 
@@ -810,8 +814,8 @@ logic [1:0] s7a_settle_count;
 logic signed [W-1:0] s7_dt_ax_w, s7_dt_ay_w;
 
 
-fx_mul #(.W(W), .F(F)) m_dt_ax (.clk(clk),.rst(rst),.a(dt),.b(s6c_ax),.c(s7_dt_ax_w));
-fx_mul #(.W(W), .F(F)) m_dt_ay (.clk(clk),.rst(rst),.a(dt),.b(s6c_ay),.c(s7_dt_ay_w));
+fx_mul #(.W(W), .F(F)) m_dt_ax (.clk(clk),.rst(rst),.a(dt),.b(s6e_ax),.c(s7_dt_ax_w));
+fx_mul #(.W(W), .F(F)) m_dt_ay (.clk(clk),.rst(rst),.a(dt),.b(s6e_ay),.c(s7_dt_ay_w));
 
 
 always @(posedge clk) begin
@@ -819,15 +823,15 @@ always @(posedge clk) begin
         s7a_valid <= 0;
     end
     else begin
-        s7a_valid <= s6c_valid;
-        s7a_x <= s6c_x;
-        s7a_y <= s6c_y;
-        s7a_vx <= s6c_vx;
-        s7a_vy <= s6c_vy;
-        s7a_step_cnt <= s6c_step_cnt;
-        s7a_id <= s6c_id;
-        s7a_settle_count <= s6c_settle_count;
-        s7a_magnet_id <= s6c_magnet_id;
+        s7a_valid <= s6e_valid;
+        s7a_x <= s6e_x;
+        s7a_y <= s6e_y;
+        s7a_vx <= s6e_vx;
+        s7a_vy <= s6e_vy;
+        s7a_step_cnt <= s6e_step_cnt;
+        s7a_id <= s6e_id;
+        s7a_settle_count <= s6e_settle_count;
+        s7a_magnet_id <= s6e_magnet_id;
     end
 end
 
@@ -843,7 +847,7 @@ logic [1:0] s7b_magnet_id;
 
 logic [1:0] s7b_settle_count;
 
-logic signed [W-1:0] s7_dt_ax, s7_dt_ay;
+logic signed [W-1:0] s7b_dt_ax, s7b_dt_ay;
 
 
 always @(posedge clk) begin
@@ -922,8 +926,8 @@ logic [1:0] s8a_settle_count;
 
 logic signed [W-1:0] s8_dt_x_w, s8_dt_y_w;
 
-fx_mul #(.W(W), .F(F)) m_dt_x (.clk(clk),.rst(rst),.a(dt),.b(s7b_vx),.c(s8_dt_x_w));
-fx_mul #(.W(W), .F(F)) m_dt_y (.clk(clk),.rst(rst),.a(dt),.b(s7b_vy),.c(s8_dt_y_w));
+fx_mul #(.W(W), .F(F)) m_dt_x (.clk(clk),.rst(rst),.a(dt),.b(s7c_vx),.c(s8_dt_x_w));
+fx_mul #(.W(W), .F(F)) m_dt_y (.clk(clk),.rst(rst),.a(dt),.b(s7c_vy),.c(s8_dt_y_w));
 
 
 always @(posedge clk) begin
@@ -931,15 +935,15 @@ always @(posedge clk) begin
         s8a_valid <= 0;
     end
     else begin
-        s8a_valid <= s7b_valid;
-        s8a_x <= s7b_x;
-        s8a_y <= s7b_y;
-        s8a_vx <= s7b_vx;
-        s8a_vy <= s7b_vy;
-        s8a_step_cnt <= s7b_step_cnt;
-        s8a_id <= s7b_id;
-        s8a_settle_count <= s7b_settle_count;
-        s8a_magnet_id <= s7b_magnet_id;
+        s8a_valid <= s7c_valid;
+        s8a_x <= s7c_x;
+        s8a_y <= s7c_y;
+        s8a_vx <= s7c_vx;
+        s8a_vy <= s7c_vy;
+        s8a_step_cnt <= s7c_step_cnt;
+        s8a_id <= s7c_id;
+        s8a_settle_count <= s7c_settle_count;
+        s8a_magnet_id <= s7c_magnet_id;
     end
 end
 
@@ -956,16 +960,16 @@ logic s8b_valid;
 logic [1:0] s8b_settle_count;
 logic [1:0] s8b_magnet_id;
 
-logic signed [W-1:0] s8_dt_x, s8_dt_y;
+logic signed [W-1:0] s8b_dt_x, s8b_dt_y;
 
 
 always @(posedge clk) begin
     if (rst) begin
-        s8a_valid <= 0;
+        s8b_valid <= 0;
     end
     else begin
-        s8_dt_x <= s8_dt_x_w;
-        s8_dt_y <= s8_dt_y_w;
+        s8b_dt_x <= s8_dt_x_w;
+        s8b_dt_y <= s8_dt_y_w;
 
         //pass through values
         s8b_valid <= s8a_valid;
