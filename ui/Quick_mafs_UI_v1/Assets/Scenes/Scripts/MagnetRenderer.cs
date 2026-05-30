@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 using Newtonsoft.Json;
 using UnityEngine.UI;
+using System;
 
 public class MagnetCoords
 {
@@ -50,6 +51,7 @@ public class MagnetRenderer : MonoBehaviour
 
         ClearAndApply();
         StartCoroutine(PollLoop());
+        Debug.Log(pollIntervalSeconds);
     }
 
     void OnDestroy()
@@ -80,6 +82,8 @@ public class MagnetRenderer : MonoBehaviour
             int idx = 0;
             foreach (var coord in info.magnets)
             {
+                Vector2 val = new Vector2(coord.Value.x, coord.Value.y);
+                Debug.Log(val);
                 //Flask server holds simulation coord values
                 //rawImage on MagnetSim uses pixel coordinates, mapping is required
                 int px = (int)Mathf.Round(W / (SIM_CORNER * 2) * (coord.Value.x + 1.8f));

@@ -39,19 +39,21 @@ fixed_3_mag = [mag_4, mag_5, mag_6]
 
 # Updates the position of a detected magnet, if not detected, we set back to default
 def magnet_update_position(mapped_mags_pos: list) -> None:
+    debug_txt = ""
     for i, mag in enumerate(mapped_mags_pos):
         default_mag = fixed_3_mag[i].copy() #otherwise, passed by reference, changes defaults
         if mag is not None:
             default_mag["x"] = float(mag[0]) #Explicitly cast numpy.float32 back to python float, otherwise not JSON serializable
             default_mag["y"] = float(mag[1])
             response = requests.post('http://35.179.111.223:5000/magnet_update_position', json = default_mag)
-            if(response.status_code==200): print("Updated!")
+            if(response.status_code==200): debug_txt += "Updated! "
             else: print("Error POSTing")
 
         else:
             response = requests.post('http://35.179.111.223:5000/magnet_update_position', json = default_mag)
-            if(response.status_code!=200): print("Updated to default!")
-            else: print("Error POSTING")
+            if(response.status_code!=200): debug_txt += "UpdatedDefault! "
+            else: print("Error POSTing")
+    print(debug_txt)
 ###
 
 
