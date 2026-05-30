@@ -237,7 +237,6 @@ def stream_webcam_with_aruco(
             if key in (ord("q"), 27):
                 break
     finally:
-        post_remove()
         cap.release()
         cv2.destroyAllWindows()
 
@@ -245,3 +244,4 @@ def stream_webcam_with_aruco(
 if __name__ == "__main__":
     pre_add()
     stream_webcam_with_aruco()
+    post_remove()
