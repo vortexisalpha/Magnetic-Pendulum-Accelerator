@@ -25,8 +25,9 @@ public class MagnetRenderer : MonoBehaviour
     [SerializeField] private int magnetRadius = 4;
     [SerializeField] private string flaskURL = "http://35.179.111.223:5000/";
 
-    private const int W = 160;
-    private const int H = 120;
+    private const float SIM_CORNER = 1.8f;
+    private const int W = 130;
+    private const int H = 130;
 
     private Texture2D tex;
     private Color32[] pixels;
@@ -79,8 +80,13 @@ public class MagnetRenderer : MonoBehaviour
             int idx = 0;
             foreach (var coord in info.magnets)
             {
+                //Flask server holds simulation coord values
+                //rawImage on MagnetSim uses pixel coordinates, mapping is required
+                int px = (int)Mathf.Round(W / (SIM_CORNER * 2) * (coord.Value.x + 1.8f));
+                int py = (int)Mathf.Round(-W / (SIM_CORNER * 2) * (coord.Value.y - 1.8f));
+
                 var color = palette[idx % palette.Length]; // % is just for safety realistically we never have more than 4 magnets (for now).
-                DrawCircle((int)coord.Value.x, (int)coord.Value.y, magnetRadius, color);
+                DrawCircle(px, py, magnetRadius, color);
                 idx++;
             }
             tex.SetPixels32(pixels);

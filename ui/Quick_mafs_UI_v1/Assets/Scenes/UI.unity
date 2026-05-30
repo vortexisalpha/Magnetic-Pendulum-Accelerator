@@ -361,6 +361,7 @@ MonoBehaviour:
   miniDisplay: {fileID: 2069797785}
   pollIntervalSeconds: 0.5
   magnetRadius: 4
+  flaskURL: http://35.179.111.223:5000/
 --- !u!4 &345777378
 Transform:
   m_ObjectHideFlags: 0
@@ -2492,7 +2493,7 @@ RectTransform:
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: -120.9, y: -60}
-  m_SizeDelta: {x: 160, y: 120}
+  m_SizeDelta: {x: 130, y: 130}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &2105956019
 GameObject:

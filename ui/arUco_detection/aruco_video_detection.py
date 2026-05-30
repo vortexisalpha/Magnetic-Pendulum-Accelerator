@@ -42,11 +42,16 @@ def magnet_update_position(mapped_mags_pos: list) -> None:
     for i, mag in enumerate(mapped_mags_pos):
         default_mag = fixed_3_mag[i].copy() #otherwise, passed by reference, changes defaults
         if mag is not None:
-            default_mag["x"] = mag[0]
-            default_mag["y"] = mag[1]
+            default_mag["x"] = float(mag[0]) #Explicitly cast numpy.float32 back to python float, otherwise not JSON serializable
+            default_mag["y"] = float(mag[1])
             response = requests.post('http://35.179.111.223:5000/magnet_update_position', json = default_mag)
+            if(response.status_code==200): print("Updated!")
+            else: print("Error POSTing")
+
         else:
             response = requests.post('http://35.179.111.223:5000/magnet_update_position', json = default_mag)
+            if(response.status_code!=200): print("Updated to default!")
+            else: print("Error POSTING")
 ###
 
 
@@ -141,6 +146,9 @@ def detect_markers(frame: np.ndarray, detector: cv2.aruco.ArucoDetector) -> np.n
         H_view, _ = cv2.findHomography(board_corners_f, DST_IMSHOW)
 
         mapped_mags_pos = token_transform(detected_mags_pos, H_sim)
+        ###
+        magnet_update_position(mapped_mags_pos)
+        ###
         annotate_mapped_mags_pos(frame, detected_mags_pos, mapped_mags_pos)
         print(mapped_mags_pos)
 
@@ -165,18 +173,9 @@ def annotate_fps(frame: np.ndarray, fps: float) -> None:
 
     cv2.putText(frame, text, origin, font, scale, (0, 255, 0), thickness)
 
-
-def stream_webcam_with_aruco(
-    camera_index: int = 0,
-    window_name_1: str = "ArUco Webcam Stream",
-    window_name_2: str = "Warped Webcam Stream",
-) -> None:
-    dictionary = cv2.aruco.getPredefinedDictionary(ARUCO_DICT_NAME)
-    params = cv2.aruco.DetectorParameters()
-    detector = cv2.aruco.ArucoDetector(dictionary, params)
-
-    # Pre-add 3 magnets, 3 trials for each, otherwise error
-    ###
+# Pre-add 3 magnets, 3 trials for each, otherwise error
+###
+def pre_add()-> None:
     for mag in fixed_3_mag:
         i = 0
         status_success = False
@@ -187,8 +186,29 @@ def stream_webcam_with_aruco(
                 status_success = True
                 break
         # Distinguish between failed POST exiting final iteration and success
-        if(not status_success): raise RuntimeError(f"Pre-adding {mag["uid"]} failed")
-    ###
+        if(not status_success): raise RuntimeError(f"Pre-adding {mag['uid']} failed")
+
+def post_remove() -> None:
+    for mag in fixed_3_mag:
+        i = 0
+        status_success = False
+        while(i<3):
+            i += 1
+            response = requests.post('http://35.179.111.223:5000/magnet_remove', json = mag)
+            if response.status_code == 200:
+                status_success = True
+                break
+        # Distinguish between failed POST exiting final iteration and success
+        if(not status_success): raise RuntimeError(f"Post-removing {mag['uid']} failed")
+
+def stream_webcam_with_aruco(
+    camera_index: int = 0,
+    window_name_1: str = "ArUco Webcam Stream",
+    window_name_2: str = "Warped Webcam Stream",
+) -> None:
+    dictionary = cv2.aruco.getPredefinedDictionary(ARUCO_DICT_NAME)
+    params = cv2.aruco.DetectorParameters()
+    detector = cv2.aruco.ArucoDetector(dictionary, params)
 
     cap = cv2.VideoCapture(camera_index)
     if not cap.isOpened():
@@ -217,9 +237,11 @@ def stream_webcam_with_aruco(
             if key in (ord("q"), 27):
                 break
     finally:
+        post_remove()
         cap.release()
         cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
+    pre_add()
     stream_webcam_with_aruco()
