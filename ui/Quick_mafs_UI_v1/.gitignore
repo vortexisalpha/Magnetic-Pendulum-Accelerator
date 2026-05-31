@@ -119,3 +119,12 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Ignores local Unity editor layout states and personal layout modifications 
+# (e.g., EditorUserSettings.asset) to prevent continuous non-code changes 
+# from cluttering git status tracking and causing layout merge conflicts.
+/[Vv]ersion[Cc]ontrol/
+/[Vv]isual[Ss]tudio/
+/[Vw]orkspace/
+/[Vv]s/
+/[Uu]ser[Ss]ettings/
