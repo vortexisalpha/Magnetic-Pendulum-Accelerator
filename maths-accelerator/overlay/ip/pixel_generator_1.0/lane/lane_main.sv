@@ -626,8 +626,8 @@ always @(posedge clk) begin
     end
 end
 
-fx_adder_s6 #(.W(W), .F(F)) dx_invq_adder (.a(s5b_dx_invq0), .b(s5b_dx_invq1), .c(s5b_dx_invq2), .d(s6a_dx_invq_sum_w));
-fx_adder_s6 #(.W(W), .F(F)) dy_invq_adder (.a(s5b_dy_invq0), .b(s5b_dy_invq1), .c(s5b_dy_invq2), .d(s6a_dy_invq_sum_w));
+fx_adder_s6 #(.W(W), .F(F)) dx_invq_adder (.a(s6a_dx_invq0), .b(s6a_dx_invq1), .c(s6a_dx_invq2), .d(s6a_dx_invq_sum_w));
+fx_adder_s6 #(.W(W), .F(F)) dy_invq_adder (.a(s6a_dy_invq0), .b(s6a_dy_invq1), .c(s6a_dy_invq2), .d(s6a_dy_invq_sum_w));
 
 
 

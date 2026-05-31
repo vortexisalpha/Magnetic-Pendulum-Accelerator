@@ -9,10 +9,11 @@ module fx_adder_s3 #(
     input  signed [W-1:0] a,
     input  signed [W-1:0] b,
     input  signed [W-1:0] c,
-    output signed [W+1:0] d
+    //note that q here would be 18 bits not 20 bits. this is again something we need to look at. 
+    output signed [W-1:0] d
 );
     //add a and b and c and put it into sum
-    wire signed [W+1:0] sum;
+    wire signed [W-1:0] sum;
     assign sum = a + b + c;
 
     //assign appropriately:
