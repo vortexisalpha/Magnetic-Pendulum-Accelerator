@@ -29,15 +29,14 @@ public class PendulumRenderer : MonoBehaviour
     [SerializeField] private MeshFilter mesh3D;
     [SerializeField] private float heightScale = 0.05f;  // iterations (height)
     [SerializeField] private float xyScale = 0.5f;   // pixel (spacing)
-    [SerializeField] private float pollIntervalSeconds = 0.5f;
+    [SerializeField] private float pollIntervalSeconds = 0.1f;
 
     private Mesh runtimeMesh;
     private Vector3[] verts3D;
     private Color32[] vertColors3D;
     private int[] tris3D;
-
-    // FPGA 6-bit pixel: {step_category[3:0], magnet_id[1:0]}
-    // Simulation 14-bit pixel: {category[1:0], iterations[11:0]}
+    
+    // can be 6 bit or 14 bit (currently fpga working on 6 bit)
     static void DecodePixel(int pixel, int bitDepth, out int category, out int depth)
     {
         if (bitDepth <= 6)
