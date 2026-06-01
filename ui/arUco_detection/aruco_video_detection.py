@@ -244,6 +244,8 @@ def stream_webcam_with_aruco(
 
 
 if __name__ == "__main__":
+    print("Pre-adding magnets to Flask server")
     pre_add()
     stream_webcam_with_aruco()
+    print("Removing magnets from Flask server")
     post_remove()
