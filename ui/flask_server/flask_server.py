@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 import json
+import time
 
 from flask import Flask, request
 
@@ -59,6 +60,8 @@ class MPData:
     pendulum_height: float = 1
     pendulum_length: float = 1
     image: list[list[int]] = field(default_factory=default_image)
+    image_received_at: float = 0.0
+    image_version: int = 0
 
 
 mp_data = MPData()
@@ -165,6 +168,9 @@ def magnet_update_position():
 
     return {"ok": 200}
 
+@app.route('/reset_magnet_position')
+def reset_magnet_positions():
+    mp_data.mag_list = []
 @app.route("/controller_data", methods=["POST"])
 def controller_data():
     body = request.get_json()
@@ -197,6 +203,9 @@ def image_post():
         }, 400
 
     mp_data.image = bytes_to_image(raw)
+    mp_data.image_received_at = time.time()
+    mp_data.image_version += 1
+    print(f"[image] received v{mp_data.image_version}")
     return {"ok": 200}
 
 @app.route("/image", methods=["GET"])
@@ -207,6 +216,8 @@ def image_get():
         "height": SCREEN_SIZE_Y,
         "bitDepth": FPGA_PIXEL_BIT_DEPTH,
         "image": mp_data.image,
+        "receivedAt": mp_data.image_received_at,
+        "version": mp_data.image_version,
     }
 
 
