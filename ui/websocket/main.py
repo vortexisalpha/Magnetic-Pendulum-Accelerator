@@ -8,11 +8,11 @@ app = FastAPI()
 
 class Event(str, Enum):
     #client to server events:
-    UpdateParams = "UpdateParams",
-    UpdateMagnetPosition = "UpdateMagnetPosition",
-    AddMagnet = "AddMagnet",
-    RemoveMagnet = "RemoveMagnet",
-    UpdateImage = "UpdateImage",
+    UpdateParams = "UpdateParams", #unity
+    UpdateMagnetPosition = "UpdateMagnetPosition", #aruco
+    AddMagnet = "AddMagnet", #aruco
+    RemoveMagnet = "RemoveMagnet", #aruco
+    UpdateImage = "UpdateImage", #fpga
     #server to client events:
     ImageUpdated = "ImageUpdated",
     MPDataUpdated = "MPDataUpdated"
@@ -51,8 +51,9 @@ class Client:
                 "receivedAt": mp_data.image_received_at,
                 "version": mp_data.image_version,
                 }
+        else:
+            raise Exception("something went wrong with sending to client")
             
-
         await self.ws.send_json(data)
 
 class ArUcoDetectionClient(Client):
@@ -77,6 +78,7 @@ class ArUcoDetectionClient(Client):
                 y = float(message_data['y'])
                 self.add_magnet(uid, x, y, mp_data)
 
+
     def update_magnet_position(self, uid, x, y, mp_data):
         for magnet in mp_data.mag_list:
             if magnet.uid == uid:
@@ -99,7 +101,13 @@ class UnityClient(Client):
         super().__init__("Unity")
 
     def handle_message(self, event, message_data, mp_data):
-        pass
+        if event == Event.UpdateParams:
+            mp_data.magnetic_strength = message_data["magnetic_strength"] 
+            mp_data.damping_factor = message_data["damping_factor"] 
+            mp_data.pendulum_height = message_data["pendulum_height"] 
+            mp_data.pendulum_length = message_data["pendulum_length"] 
+        else:
+            raise Exception("something went wrong in unity handle message (wrong event)")
 
 
 class FPGAClient(Client):
@@ -107,7 +115,6 @@ class FPGAClient(Client):
         super().__init__("FPGA")
     def handle_message(self, event, message_data, mp_data):
         pass
-
 
 class ConnectionManager:
     def __init__(self):
