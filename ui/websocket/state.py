@@ -1,12 +1,7 @@
 from dataclasses import dataclass 
+import json
 
-SCREEN_SIZE_X = 160
-SCREEN_SIZE_Y = 120
-
-FPGA_PIXEL_BIT_DEPTH = 6
-
-PHYSICAL_COORD_MIN = -1.8
-PHYSICAL_COORD_MAX = 1.8
+from config import *
 
 @dataclass
 class Magnet:
@@ -52,7 +47,7 @@ class MPData:
     image_received_at: float = 0.0
     image_version: int = 0
 
-def construct_mpdata_json(data: MPData) -> str:
+def construct_mpdata_json(data):
     payload = {
         "magnets": {},
         "ui_grid": {},

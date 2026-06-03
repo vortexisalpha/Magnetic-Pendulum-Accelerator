@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from fastapi import FastAPI, WebSocket
-from state import MPData, Magnet
+from state import MPData, Magnet, construct_mpdata_json
 from enum import Enum
-
+from config import *
 
 app = FastAPI()
 
@@ -41,6 +41,17 @@ class Client:
         data = {}
 
         if event == Event.MPDataUpdated:
+            data = construct_mpdata_json(mp_data)
+        elif event == Event.ImageUpdated:
+             data = {
+                "width": SCREEN_SIZE_X,
+                "height": SCREEN_SIZE_Y,
+                "bitDepth": mp_data.image_bit_depth,
+                "image": mp_data.image,
+                "receivedAt": mp_data.image_received_at,
+                "version": mp_data.image_version,
+                }
+            
 
         await self.ws.send_json(data)
 
@@ -123,8 +134,8 @@ class ConnectionManager:
         if event == Event.UpdateImage:
             send_event = Event.ImageUpdated
 
-        for client in self.connections.values():
-            if client.name != exception_client and client.name != "ArUco":
+        for name, client in self.connections.items():
+            if name != exception_client and name != "ArUco":
                 await client.send(send_event, self.mp_data)
 
 
