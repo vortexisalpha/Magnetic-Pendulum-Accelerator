@@ -1,11 +1,15 @@
 from fastapi import FastAPI, WebSocket
+from state import MPData
 
+
+mp_data = MPData()
 
 app = FastAPI()
 
 class Client:
     def __init__(self, name):
         self.name = name
+        self.connected = False
 
 class ArUcoDetectionClient(Client):
     def __init__(self):
@@ -27,7 +31,7 @@ class ConnectionManager:
         self.fpga_client = FPGAClient()
         self.connections = [self.aruco_client, self.unity_client, self.fpga_client]
 
-
+    
 
 @app.websocket("/ws")
 async def websocket_connect(ws : WebSocket):
