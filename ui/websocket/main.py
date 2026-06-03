@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from fastapi import FastAPI, WebSocket
-from state import MPData
+from state import MPData, Magnet
 from enum import Enum
 
 
@@ -38,6 +38,14 @@ class ArUcoDetectionClient(Client):
                 x = float(message_data['x'])
                 y = float(message_data['y'])
                 self.update_magnet_position(uid, x, y, mp_data)
+            case Event.RemoveMagnet:
+                uid = message_data['uid']
+                self.remove_magnet(uid, mp_data)
+            case Event.AddMagnet:
+                uid = message_data['uid']
+                x = float(message_data['x'])
+                y = float(message_data['y'])
+                self.add_magnet(uid, x, y, mp_data)
 
     def update_magnet_position(self, uid, x, y, mp_data):
         for magnet in mp_data.mag_list:
@@ -46,19 +54,29 @@ class ArUcoDetectionClient(Client):
                 magnet.y = y
                 return
 
-    
-    
+    def remove_magnet(self, uid, mp_data):
+        for i, magnet in enumerate(mp_data.mag_list):
+            if magnet.uid == uid:
+                mp_data.mag_list.pop(i)
+                return
+
+    def add_magnet(self, uid, x, y, mp_data):
+        mp_data.mag_list.append(Magnet(uid, x, y))
+        return
+
 class UnityClient(Client):
     def __init__(self):
         super().__init__("Unity")
     def handle_message(self, event, message_data, mp_data):
         pass
 
+
 class FPGAClient(Client):
     def __init__(self):
         super().__init__("FPGA")
     def handle_message(self, event, message_data, mp_data):
         pass
+
 
 class ConnectionManager:
     def __init__(self):
