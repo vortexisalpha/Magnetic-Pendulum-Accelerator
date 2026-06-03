@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from fastapi import FastAPI, WebSocket
-from state import MPData, Magnet, construct_mpdata_json
+from state import MPData, Magnet, commit_image, construct_mpdata_json
 from enum import Enum
 from config import *
 
@@ -115,10 +115,9 @@ class FPGAClient(Client):
         super().__init__("FPGA")
     def handle_message(self, event, message_data, mp_data):
         if event == Event.UpdateImage:
-            mp_data.image = message_data["image"] 
-            mp_data.image_bit_depth = message_data["bitDepth"] 
+            commit_image(mp_data, message_data["image"], int(message_data["bitDepth"]))
         else:
-            raise Exception("something went wrong in unity handle message (wrong event)")
+            raise Exception("something went wrong in FPGA handle message (wrong event)")
 
 class ConnectionManager:
     def __init__(self):
@@ -169,5 +168,8 @@ async def websocket_connect(ws, client_name):
         await connection_manager.on_message(ws, client_name)
 
 
+if __name__ == "__main__":
+    import uvicorn
 
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 

@@ -1,3 +1,4 @@
+import time
 from dataclasses import dataclass, field
 
 from config import *
@@ -48,7 +49,14 @@ class MPData:
     image_bit_depth: int = FPGA_PIXEL_BIT_DEPTH
     image_received_at: float = 0.0
     image_version: int = 0
-    image_version: int = 0
+
+
+def commit_image(data: MPData, image: list[list[int]], bit_depth: int) -> None:
+    data.image = image
+    data.image_bit_depth = bit_depth
+    data.image_received_at = time.time()
+    data.image_version += 1
+
 
 def construct_mpdata_json(data):
     payload = {
