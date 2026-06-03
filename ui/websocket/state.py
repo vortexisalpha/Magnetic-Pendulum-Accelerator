@@ -52,3 +52,37 @@ class MPData:
     image_received_at: float = 0.0
     image_version: int = 0
 
+def construct_mpdata_json(data: MPData) -> str:
+    payload = {
+        "magnets": {},
+        "ui_grid": {},
+        "physical_grid": {},
+    }
+
+    for index, magnet in enumerate(data.mag_list):
+        payload["magnets"][f"magnet_{index}"] = {
+            "x": magnet.x,
+            "y": magnet.y,
+        }
+
+    sync_physical_grid(data)
+
+    payload["ui_grid"]["x_min"] = data.ui_grid.x_min
+    payload["ui_grid"]["x_max"] = data.ui_grid.x_max
+    payload["ui_grid"]["y_min"] = data.ui_grid.y_min
+    payload["ui_grid"]["y_max"] = data.ui_grid.y_max
+
+    payload["physical_grid"]["x_min"] = data.physical_grid.x_min
+    payload["physical_grid"]["x_max"] = data.physical_grid.x_max
+    payload["physical_grid"]["y_min"] = data.physical_grid.y_min
+    payload["physical_grid"]["y_max"] = data.physical_grid.y_max
+
+    payload["magnetic_strength"] = data.magnetic_strength
+    payload["damping_factor"] = data.damping_factor
+    payload["pendulum_height"] = data.pendulum_height
+    payload["pendulum_length"] = data.pendulum_length
+
+    return json.dumps(payload)
+
+def sync_physical_grid(data: MPData) -> None:
+    data.physical_grid = ui_grid_to_physical_grid(data.ui_grid)
