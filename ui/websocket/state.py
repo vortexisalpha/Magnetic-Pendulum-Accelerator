@@ -1,5 +1,4 @@
 from dataclasses import dataclass 
-import json
 
 from config import *
 
@@ -77,7 +76,7 @@ def construct_mpdata_json(data):
     payload["pendulum_height"] = data.pendulum_height
     payload["pendulum_length"] = data.pendulum_length
 
-    return json.dumps(payload)
+    return payload
 
-def sync_physical_grid(data: MPData) -> None:
+def sync_physical_grid(data: MPData):
     data.physical_grid = ui_grid_to_physical_grid(data.ui_grid)

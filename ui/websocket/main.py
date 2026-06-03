@@ -132,7 +132,7 @@ class ConnectionManager:
         self.connections[client_name].connect(ws)
     
     async def on_message(self, ws, client_name):
-        message = await ws.recieve_json()
+        message = await ws.receive_json()
         event = Event(message['event'])
         client = self.connections[client_name]
         client.handle_message(event, message['data'], self.mp_data)
