@@ -34,6 +34,15 @@ class Client:
         self.connected = True
         self.ws = ws
 
+    async def send(self, event, mp_data):
+        if not self.ws:
+            return
+
+        data = {}
+
+        if event == Event.MPDataUpdated:
+
+        await self.ws.send_json(data)
 
 class ArUcoDetectionClient(Client):
     def __init__(self):
@@ -96,6 +105,9 @@ class ConnectionManager:
         self.unity_client = UnityClient()
         self.fpga_client = FPGAClient()
         self.connections = {"ArUco" : self.aruco_client, "Unity" : self.unity_client, "FPGA" : self.fpga_client}
+
+    def connect(self, client_name, ws):
+        self.connections[client_name].connect(ws)
     
     async def on_message(self, ws, client_name):
         message = await ws.recieve_json()
@@ -128,15 +140,8 @@ async def websocket_connect(ws, client_name):
         await ws.close()
         return
 
-    match client_name:
-        case "ArUco":
-            connection_manager.aruco_client.connect(ws)
-        case "Unity":
-            connection_manager.unity_client.connect(ws)
-        case "FPGA":
-            connection_manager.fpga_client.connect(ws)
-
     await ws.accept()
+    connection_manager.connect(client_name, ws)
 
     while True:
         await connection_manager.on_message(ws, client_name)
