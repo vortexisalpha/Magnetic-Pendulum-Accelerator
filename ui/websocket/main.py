@@ -23,9 +23,11 @@ class Client:
     def __init__(self, name):
         self.name = name
         self.connected = False
+        self.ws = None
 
-    def connect(self):
+    def connect(self, ws):
         self.connected = True
+        self.ws = ws
 
 class ArUcoDetectionClient(Client):
     def __init__(self):
@@ -38,9 +40,11 @@ class ArUcoDetectionClient(Client):
                 x = float(message_data['x'])
                 y = float(message_data['y'])
                 self.update_magnet_position(uid, x, y, mp_data)
+
             case Event.RemoveMagnet:
                 uid = message_data['uid']
                 self.remove_magnet(uid, mp_data)
+
             case Event.AddMagnet:
                 uid = message_data['uid']
                 x = float(message_data['x'])
@@ -67,6 +71,7 @@ class ArUcoDetectionClient(Client):
 class UnityClient(Client):
     def __init__(self):
         super().__init__("Unity")
+
     def handle_message(self, event, message_data, mp_data):
         pass
 
@@ -84,18 +89,17 @@ class ConnectionManager:
         self.aruco_client = ArUcoDetectionClient()
         self.unity_client = UnityClient()
         self.fpga_client = FPGAClient()
-        self.connections = [self.aruco_client, self.unity_client, self.fpga_client]
+        self.connections = {"ArUco" : self.aruco_client, "Unity" : self.unity_client, "FPGA" : self.fpga_client}
     
-    async def on_message(self, ws):
+    async def on_message(self, ws, client_name):
         message = await ws.recieve_json()
         event = Event(message['event'])
-        match message['client']:
-            case "ArUco":
-                self.aruco_client.handle_message(event, message['data'], self.mp_data)
-            case "Unity":
-                self.unity_client.handle_message(event, message['data'], self.mp_data)
-            case "FPGA":
-                self.fpga_client.handle_message(event, message['data'], self.mp_data)
+        client = self.connections[client_name]
+        client.handle_message(event, message['data'], self.mp_data)
+        await self.notify_all_except(client_name, event)
+
+    async def notify_all_except(self, client, event):
+        pass
 
 
 connection_manager = ConnectionManager()
@@ -111,16 +115,16 @@ async def websocket_connect(ws, client_name):
 
     match client_name:
         case "ArUco":
-            connection_manager.aruco_client.connect()
+            connection_manager.aruco_client.connect(ws)
         case "Unity":
-            connection_manager.unity_client.connect()
+            connection_manager.unity_client.connect(ws)
         case "FPGA":
-            connection_manager.fpga_client.connect()
+            connection_manager.fpga_client.connect(ws)
 
     await ws.accept()
 
     while True:
-        await connection_manager.on_message(ws)
+        await connection_manager.on_message(ws, client_name)
 
 
 
