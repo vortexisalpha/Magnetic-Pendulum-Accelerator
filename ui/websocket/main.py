@@ -7,11 +7,16 @@ from enum import Enum
 app = FastAPI()
 
 class Event(str, Enum):
+    #client to server events:
     UpdateParams = "UpdateParams",
     UpdateMagnetPosition = "UpdateMagnetPosition",
     AddMagnet = "AddMagnet",
     RemoveMagnet = "RemoveMagnet",
     UpdateImage = "UpdateImage",
+    #server to client events:
+    ImageUpdated = "ImageUpdated",
+    MPDataUpdated = "MPDataUpdated"
+
 """
 json format:
     client: str
@@ -28,6 +33,7 @@ class Client:
     def connect(self, ws):
         self.connected = True
         self.ws = ws
+
 
 class ArUcoDetectionClient(Client):
     def __init__(self):
@@ -96,10 +102,19 @@ class ConnectionManager:
         event = Event(message['event'])
         client = self.connections[client_name]
         client.handle_message(event, message['data'], self.mp_data)
-        await self.notify_all_except(client_name, event)
 
-    async def notify_all_except(self, client, event):
-        pass
+        await self.notify_relevant(client_name, event)
+
+    async def notify_relevant(self, exception_client, event):
+        #note that aruco marker never needs to be sent updates
+        send_event = Event.MPDataUpdated
+        if event == Event.UpdateImage:
+            send_event = Event.ImageUpdated
+
+        for client in self.connections.values():
+            if client.name != exception_client and client.name != "ArUco":
+                await client.send(send_event, self.mp_data)
+
 
 
 connection_manager = ConnectionManager()
