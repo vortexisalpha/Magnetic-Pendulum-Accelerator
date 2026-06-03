@@ -1,4 +1,4 @@
-from dataclasses import dataclass 
+from dataclasses import dataclass, field
 
 from config import *
 
@@ -32,18 +32,22 @@ def ui_grid_to_physical_grid(ui_grid: Grid) -> Grid:
         y_max=_ui_axis_to_physical(ui_grid.y_max, ui_grid.y_min, ui_grid.y_max),
     )
 
+def default_image() -> list[list[int]]:
+    return [[0 for _ in range(SCREEN_SIZE_X)]  for _ in range(SCREEN_SIZE_Y)] 
+
 @dataclass
 class MPData:
-    mag_list: list[Magnet] = []
-    ui_grid: Grid = Grid()
-    physical_grid: Grid = Grid()
+    mag_list: list[Magnet] = field(default_factory=list)
+    ui_grid: Grid = field(default_factory=Grid)
+    physical_grid: Grid = field(default_factory=Grid)
     magnetic_strength: float = 1
     damping_factor: float = 1
     pendulum_height: float = 1
     pendulum_length: float = 1
-    image: list[list[int]] = [[0 for _ in range(SCREEN_SIZE_X)]  for _ in range(SCREEN_SIZE_Y)]
+    image: list[list[int]] = field(default_factory=default_image)
     image_bit_depth: int = FPGA_PIXEL_BIT_DEPTH
     image_received_at: float = 0.0
+    image_version: int = 0
     image_version: int = 0
 
 def construct_mpdata_json(data):
