@@ -1,19 +1,17 @@
 from dataclasses import dataclass
 from fastapi import FastAPI, WebSocket
 from state import MPData
+from enum import Enum
 
 
 app = FastAPI()
 
-"""
-Events:
-    UpdateParams
-    UpdateMagnetPosition
-    AddMagnet
-    RemoveMagnet
-    UpdateImage
-"""
-
+class Event(str, Enum):
+    UpdateParams = "UpdateParams",
+    UpdateMagnetPosition = "UpdateMagnetPosition",
+    AddMagnet = "AddMagnet",
+    RemoveMagnet = "RemoveMagnet",
+    UpdateImage = "UpdateImage",
 """
 json format:
     client: str
@@ -32,15 +30,20 @@ class Client:
 class ArUcoDetectionClient(Client):
     def __init__(self):
         super().__init__("ArUco")
-
+    def handle_message(self, message, data):
+        case message('')
+    
 class UnityClient(Client):
     def __init__(self):
         super().__init__("Unity")
+    def handle_message(self, message, data):
+        pass
 
 class FPGAClient(Client):
     def __init__(self):
         super().__init__("FPGA")
-
+    def handle_message(self, message, data):
+        pass
 
 class ConnectionManager:
     def __init__(self):
@@ -51,12 +54,13 @@ class ConnectionManager:
         self.connections = [self.aruco_client, self.unity_client, self.fpga_client]
     
     async def OnMessage(self, message):
-        if message['client'] == "ArUco":
-            self.aruco_client.handle_message(message, self.mp_data)
-        elif message['client'] == "Unity":
-            self.unity_client.handle_message(message, self.mp_data)
-        elif message['client'] == "FPGA":
-            self.fpga_client.handle_message(message, self.mp_data)
+        match message['client']:
+            case("Aruco"):
+                self.aruco_client.handle_message(message['data'], self.mp_data)
+            case("Unity"):
+                self.unity_client.handle_message(message['data'], self.mp_data)
+            case("FPGA"):
+                self.fpga_client.handle_message(message['data'], self.mp_data)
 
 
 connection_manager = ConnectionManager()
