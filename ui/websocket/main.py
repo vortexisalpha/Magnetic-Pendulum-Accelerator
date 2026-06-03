@@ -114,7 +114,11 @@ class FPGAClient(Client):
     def __init__(self):
         super().__init__("FPGA")
     def handle_message(self, event, message_data, mp_data):
-        pass
+        if event == Event.UpdateImage:
+            mp_data.image = message_data["image"] 
+            mp_data.image_bit_depth = message_data["bitDepth"] 
+        else:
+            raise Exception("something went wrong in unity handle message (wrong event)")
 
 class ConnectionManager:
     def __init__(self):
