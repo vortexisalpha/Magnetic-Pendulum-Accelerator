@@ -805,7 +805,7 @@ MonoBehaviour:
   mesh3D: {fileID: 793402350}
   heightScale: 0.02
   xyScale: 0.5
-  pollIntervalSeconds: 0.5
+  pollIntervalSeconds: 0.02
 --- !u!4 &1269219307
 Transform:
   m_ObjectHideFlags: 0

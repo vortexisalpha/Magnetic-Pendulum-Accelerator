@@ -60,6 +60,7 @@ class MPData:
     pendulum_height: float = 1
     pendulum_length: float = 1
     image: list[list[int]] = field(default_factory=default_image)
+    image_bit_depth: int = FPGA_PIXEL_BIT_DEPTH
     image_received_at: float = 0.0
     image_version: int = 0
 
@@ -193,8 +194,29 @@ def bytes_to_image(raw: bytes):
     return [list(raw[row * SCREEN_SIZE_X : (row + 1) * SCREEN_SIZE_X]) for row in range(SCREEN_SIZE_Y)]
 
 
+def _commit_image(image: list[list[int]], bit_depth: int) -> None:
+    mp_data.image = image
+    mp_data.image_bit_depth = bit_depth
+    mp_data.image_received_at = time.time()
+    mp_data.image_version += 1
+    print(f"[image] received v{mp_data.image_version} ({bit_depth}-bit)")
+
+
 @app.route("/image", methods=["POST"])
 def image_post():
+    if request.is_json:
+        body = request.get_json(silent=True) or {}
+        image = body.get("image")
+        if not image:
+            return {"error": "missing image array"}, 400
+        if len(image) != SCREEN_SIZE_Y or any(len(row) != SCREEN_SIZE_X for row in image):
+            return {
+                "error": f"expected {SCREEN_SIZE_X}x{SCREEN_SIZE_Y} image",
+            }, 400
+        bit_depth = int(body.get("bitDepth", 14))
+        _commit_image(image, bit_depth)
+        return {"ok": 200}
+
     raw = request.get_data()
     expected = SCREEN_SIZE_X * SCREEN_SIZE_Y
     if len(raw) != expected:
@@ -202,10 +224,7 @@ def image_post():
             "error": f"expected {expected} bytes, got {len(raw)}",
         }, 400
 
-    mp_data.image = bytes_to_image(raw)
-    mp_data.image_received_at = time.time()
-    mp_data.image_version += 1
-    print(f"[image] received v{mp_data.image_version}")
+    _commit_image(bytes_to_image(raw), FPGA_PIXEL_BIT_DEPTH)
     return {"ok": 200}
 
 @app.route("/image", methods=["GET"])
@@ -214,7 +233,7 @@ def image_get():
      return {
         "width": SCREEN_SIZE_X,
         "height": SCREEN_SIZE_Y,
-        "bitDepth": FPGA_PIXEL_BIT_DEPTH,
+        "bitDepth": mp_data.image_bit_depth,
         "image": mp_data.image,
         "receivedAt": mp_data.image_received_at,
         "version": mp_data.image_version,

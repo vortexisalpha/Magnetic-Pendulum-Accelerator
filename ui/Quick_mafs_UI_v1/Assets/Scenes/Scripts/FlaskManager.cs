@@ -14,6 +14,8 @@ public class ControlData
 // (Formerly POSTed JSON to the Flask /controller_data endpoint.)
 public class FlaskManager : MonoBehaviour
 {
+    static FlaskManager instance;
+
     [SerializeField] GameObject dampingFactorController;
     [SerializeField] GameObject magneticStrengthController;
     [SerializeField] GameObject lengthController;
@@ -29,6 +31,11 @@ public class FlaskManager : MonoBehaviour
 
     private ControlData data = new ControlData();
 
+    void Awake()
+    {
+        instance = this;
+    }
+
     void Start()
     {
         dampingSlider = dampingFactorController.GetComponent<SliderTextDisplay>();
@@ -41,7 +48,13 @@ public class FlaskManager : MonoBehaviour
 
     void OnDestroy()
     {
+        if (instance == this) instance = null;
         StopAllCoroutines();
+    }
+
+    public static void PostControllerDataNow()
+    {
+        instance?.SendParamsNow();
     }
 
     private IEnumerator SendLoop()
@@ -70,5 +83,16 @@ public class FlaskManager : MonoBehaviour
         data.magneticStrength = magneticSlider.displayValue;
         data.pendulumLength = lengthSlider.displayValue;
         data.pendulumHeight = heightSlider.displayValue;
+    }
+
+    private void SendParamsNow()
+    {
+        SnapshotSliders();
+        if (PynqConnection.Instance == null) return;
+        PynqConnection.Instance.SendParams(
+            data.dampingFactor,
+            data.magneticStrength,
+            data.pendulumLength,
+            data.pendulumHeight);
     }
 }

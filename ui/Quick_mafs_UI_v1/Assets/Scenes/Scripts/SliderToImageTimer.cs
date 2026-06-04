@@ -19,7 +19,7 @@ public static class SliderToImageTimer
         versionAtSliderChange = PendulumRenderer.LastFetchedVersion;
     }
 
-    public static void OnImageFetched(int[][] image, int version)
+    public static void OnImageFetched(int version)
     {
         if (!waiting)
             return;

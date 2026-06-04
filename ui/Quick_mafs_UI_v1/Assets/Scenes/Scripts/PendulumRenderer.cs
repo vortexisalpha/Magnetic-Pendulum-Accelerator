@@ -3,6 +3,8 @@ using UnityEngine.UI;
 
 public class PendulumRenderer : MonoBehaviour
 {
+    public static int LastFetchedVersion { get; private set; }
+
     [SerializeField] private RawImage categoryImage;
     [SerializeField] private RawImage valueImage;
 
@@ -94,6 +96,9 @@ public class PendulumRenderer : MonoBehaviour
 
     void ApplyImage(ImageMessage msg)
     {
+        ImagePostToFrameTimer.OnImageReceived(msg);
+        SliderToImageTimer.OnImageFetched(msg.version);
+
         int width = msg.width;
         int height = msg.height;
 
@@ -144,6 +149,9 @@ public class PendulumRenderer : MonoBehaviour
         runtimeMesh.triangles = tris3D;
         runtimeMesh.RecalculateNormals();
         runtimeMesh.RecalculateBounds();
+
+        LastFetchedVersion = msg.version;
+        ImagePostToFrameTimer.OnFrameOutput(msg);
     }
 
     public void SetCategoryVisible(bool visible)
