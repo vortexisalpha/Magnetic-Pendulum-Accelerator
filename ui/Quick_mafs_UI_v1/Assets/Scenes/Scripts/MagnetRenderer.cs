@@ -1,24 +1,12 @@
-using System.Collections.Generic;
 using System.Collections;
-using System.Text;
-using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEngine.Networking;
 using Newtonsoft.Json;
-using UnityEngine.UI;
-using System;
 
-public class MagnetCoords
-{
-    public float x;
-    public float y;
-}
-
-public class InfoResponse
-{
-    public Dictionary<string, MagnetCoords> magnets;
-}
-
+// Magnet positions come from the Flask server (fed live by the ArUco camera
+// detection), NOT over the PYNQ TCP link. Image + sliders use TCP; only the
+// magnet dots are pulled from Flask /info here.
 public class MagnetRenderer : MonoBehaviour
 {
     [SerializeField] private RawImage miniDisplay;
@@ -51,7 +39,6 @@ public class MagnetRenderer : MonoBehaviour
 
         ClearAndApply();
         StartCoroutine(PollLoop());
-        Debug.Log(pollIntervalSeconds);
     }
 
     void OnDestroy()
@@ -76,26 +63,35 @@ public class MagnetRenderer : MonoBehaviour
             yield return req.SendWebRequest();
             if (req.result != UnityWebRequest.Result.Success) yield break;
 
-            var info = JsonConvert.DeserializeObject<InfoResponse>(req.downloadHandler.text);
+            var info = JsonConvert.DeserializeObject<InfoMessage>(req.downloadHandler.text);
+            if (info == null || info.magnets == null) yield break;
 
-            ClearPixels();
-            int idx = 0;
-            foreach (var coord in info.magnets)
-            {
-                Vector2 val = new Vector2(coord.Value.x, coord.Value.y);
-                Debug.Log(val);
-                //Flask server holds simulation coord values
-                //rawImage on MagnetSim uses pixel coordinates, mapping is required
-                int px = (int)Mathf.Round(W / (SIM_CORNER * 2) * (coord.Value.x + 1.8f));
-                int py = (int)Mathf.Round(-W / (SIM_CORNER * 2) * (coord.Value.y - 1.8f));
+            ApplyInfo(info);
 
-                var color = palette[idx % palette.Length]; // % is just for safety realistically we never have more than 4 magnets (for now).
-                DrawCircle(px, py, magnetRadius, color);
-                idx++;
-            }
-            tex.SetPixels32(pixels);
-            tex.Apply();
+            // Relay the same magnet positions to the board over TCP so the FPGA
+            // basin is computed from what we display.
+            if (PynqConnection.Instance != null)
+                PynqConnection.Instance.SendMagnets(info.magnets);
         }
+    }
+
+    void ApplyInfo(InfoMessage info)
+    {
+        ClearPixels();
+        int idx = 0;
+        foreach (var coord in info.magnets)
+        {
+            //Flask server holds simulation coord values
+            //rawImage on MagnetSim uses pixel coordinates, mapping is required
+            int px = (int)Mathf.Round(W / (SIM_CORNER * 2) * (coord.Value.x + 1.8f));
+            int py = (int)Mathf.Round(-W / (SIM_CORNER * 2) * (coord.Value.y - 1.8f));
+
+            var color = palette[idx % palette.Length]; // % is just for safety realistically we never have more than 4 magnets (for now).
+            DrawCircle(px, py, magnetRadius, color);
+            idx++;
+        }
+        tex.SetPixels32(pixels);
+        tex.Apply();
     }
 
     void ClearAndApply()
@@ -128,5 +124,3 @@ public class MagnetRenderer : MonoBehaviour
         }
     }
 }
-
-

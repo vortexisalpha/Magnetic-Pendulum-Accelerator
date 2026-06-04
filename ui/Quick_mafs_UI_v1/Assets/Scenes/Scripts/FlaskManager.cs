@@ -1,7 +1,5 @@
 using System.Collections;
-using System.Text;
 using UnityEngine;
-using UnityEngine.Networking;
 
 [System.Serializable]
 public class ControlData
@@ -12,11 +10,10 @@ public class ControlData
     public float pendulumHeight;
 }
 
+// Pushes the controller sliders to the PYNQ board over the shared TCP link.
+// (Formerly POSTed JSON to the Flask /controller_data endpoint.)
 public class FlaskManager : MonoBehaviour
 {
-    private string endpoint = "controller_data";
-    private string URL;
-
     [SerializeField] GameObject dampingFactorController;
     [SerializeField] GameObject magneticStrengthController;
     [SerializeField] GameObject lengthController;
@@ -32,17 +29,14 @@ public class FlaskManager : MonoBehaviour
 
     private ControlData data = new ControlData();
 
-    //on start, establish url and coroutine (async function)
     void Start()
     {
-        URL = "http://35.179.111.223:5000/" + endpoint;
-
         dampingSlider = dampingFactorController.GetComponent<SliderTextDisplay>();
         magneticSlider = magneticStrengthController.GetComponent<SliderTextDisplay>();
         lengthSlider = lengthController.GetComponent<SliderTextDisplay>();
         heightSlider = pendulumHeightController.GetComponent<SliderTextDisplay>();
 
-        StartCoroutine(postLoop());
+        StartCoroutine(SendLoop());
     }
 
     void OnDestroy()
@@ -50,44 +44,31 @@ public class FlaskManager : MonoBehaviour
         StopAllCoroutines();
     }
 
-    private IEnumerator postLoop()
+    private IEnumerator SendLoop()
     {
+        var wait = new WaitForSeconds(postInterval);
         while (true)
         {
-            string json = compileJson();
+            SnapshotSliders();
 
-            yield return PostJson(json);
+            if (PynqConnection.Instance != null)
+            {
+                PynqConnection.Instance.SendParams(
+                    data.dampingFactor,
+                    data.magneticStrength,
+                    data.pendulumLength,
+                    data.pendulumHeight);
+            }
 
-            yield return new WaitForSeconds(postInterval);
+            yield return wait;
         }
     }
 
-    private IEnumerator PostJson(string json)
-    {
-        //initialise raw byte array to be sent as json in post req
-        byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
-
-        using (UnityWebRequest request = new UnityWebRequest(URL, "POST"))
-        {
-            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Content-Type", "application/json");
-
-            yield return request.SendWebRequest();
-
-            //can add error checking here
-        }
-    }
-
-    private string compileJson()
+    private void SnapshotSliders()
     {
         data.dampingFactor = dampingSlider.displayValue;
         data.magneticStrength = magneticSlider.displayValue;
         data.pendulumLength = lengthSlider.displayValue;
         data.pendulumHeight = heightSlider.displayValue;
-
-        return JsonUtility.ToJson(data, true);
     }
-
-
 }

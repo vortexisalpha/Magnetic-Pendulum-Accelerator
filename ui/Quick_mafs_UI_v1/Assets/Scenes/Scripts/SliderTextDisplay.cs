@@ -19,6 +19,8 @@ public class SliderTextDisplay : MonoBehaviour
     {
         displayValue = paramMin + (paramMax - paramMin) * value;
         sliderVal.text = displayValue.ToString("0.00");
+        SliderToImageTimer.OnSliderChanged();
+        FlaskManager.PostControllerDataNow();
     }
 
 

@@ -1,20 +1,8 @@
 using UnityEngine;
 using UnityEngine.UI;
-using System;
-using System.Collections;
-using UnityEngine.Networking;
-using Newtonsoft.Json; //needed for 2d arr json handling
-
-public class ImageResponse
-{
-    public int width;
-    public int height;
-    public int bitDepth;
-    public int[][] image; 
-}
 
 public class PendulumRenderer : MonoBehaviour
-{    
+{
     [SerializeField] private RawImage categoryImage;
     [SerializeField] private RawImage valueImage;
 
@@ -29,13 +17,14 @@ public class PendulumRenderer : MonoBehaviour
     [SerializeField] private MeshFilter mesh3D;
     [SerializeField] private float heightScale = 0.05f;  // iterations (height)
     [SerializeField] private float xyScale = 0.5f;   // pixel (spacing)
-    [SerializeField] private float pollIntervalSeconds = 0.1f;
 
     private Mesh runtimeMesh;
     private Vector3[] verts3D;
     private Color32[] vertColors3D;
     private int[] tris3D;
-    
+    private int meshW = -1;
+    private int meshH = -1;
+
     // can be 6 bit or 14 bit (currently fpga working on 6 bit)
     static void DecodePixel(int pixel, int bitDepth, out int category, out int depth)
     {
@@ -59,23 +48,19 @@ public class PendulumRenderer : MonoBehaviour
 
     void Start()
     {
-        BuildMeshSkeleton(160, 120);
-        StartCoroutine(PollLoop());
+        if (PynqConnection.Instance != null)
+        {
+            PynqConnection.Instance.ImageReceived += ApplyImage;
+            //render immediately if a frame already arrived before we subscribed
+            if (PynqConnection.Instance.LatestImage != null)
+                ApplyImage(PynqConnection.Instance.LatestImage);
+        }
     }
 
     void OnDestroy()
     {
-        StopAllCoroutines();
-    }
-
-    IEnumerator PollLoop()
-    {
-        var wait = new WaitForSeconds(pollIntervalSeconds);
-        while (true)
-        {
-            yield return FetchImage();
-            yield return wait;
-        }
+        if (PynqConnection.Instance != null)
+            PynqConnection.Instance.ImageReceived -= ApplyImage;
     }
 
     void BuildMeshSkeleton(int w, int h)
@@ -103,64 +88,62 @@ public class PendulumRenderer : MonoBehaviour
         runtimeMesh = new Mesh();
         runtimeMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh3D.mesh = runtimeMesh;
+        meshW = w;
+        meshH = h;
     }
 
-    IEnumerator FetchImage()
+    void ApplyImage(ImageMessage msg)
     {
-        using (var req = UnityWebRequest.Get("http://35.179.111.223:5000/image"))
-        {
-            yield return req.SendWebRequest();
-            if (req.result != UnityWebRequest.Result.Success) yield break;
+        int width = msg.width;
+        int height = msg.height;
 
-            var resp = JsonConvert.DeserializeObject<ImageResponse>(req.downloadHandler.text);
-            int width = resp.width;
-            int height = resp.height;
+        if (width != meshW || height != meshH)
+            BuildMeshSkeleton(width, height);
 
-            var texCategory = new Texture2D(width, height, TextureFormat.RGBA32, false);
-            var texValue = new Texture2D(width, height, TextureFormat.RGBA32, false);
-            texCategory.filterMode = FilterMode.Point;
-            texValue.filterMode = FilterMode.Point;
+        var texCategory = new Texture2D(width, height, TextureFormat.RGBA32, false);
+        var texValue = new Texture2D(width, height, TextureFormat.RGBA32, false);
+        texCategory.filterMode = FilterMode.Point;
+        texValue.filterMode = FilterMode.Point;
 
-            var catPixels = new Color32[width * height];
-            var valPixels = new Color32[width * height];
-            int depthMax = DepthMax(resp.bitDepth);
-            float depthScale = DepthToWorldScale(resp.bitDepth, heightScale);
+        var catPixels = new Color32[width * height];
+        var valPixels = new Color32[width * height];
+        int depthMax = DepthMax(msg.bitDepth);
+        float depthScale = DepthToWorldScale(msg.bitDepth, heightScale);
 
-            for (int y = 0; y < height; y++){
-                for (int x = 0; x < width; x++){
-                    int pixel = resp.image[y][x];
+        for (int y = 0; y < height; y++){
+            for (int x = 0; x < width; x++){
+                int pixel = msg.pixels[y * width + x];
 
-                    DecodePixel(pixel, resp.bitDepth, out int category, out int depth);
+                DecodePixel(pixel, msg.bitDepth, out int category, out int depth);
 
-                    int bufPos = (height - y - 1) * width + x; //array buffer is inverted in unity, flip y
+                int bufPos = (height - y - 1) * width + x; //array buffer is inverted in unity, flip y
 
-                    catPixels[bufPos] = palette[category];
-                    
-                    byte intensity = (byte)((depth * 255) / depthMax);
-                    valPixels[bufPos] = PlasmaColor(intensity);
+                catPixels[bufPos] = palette[category];
 
-                    //3d: depth = step bins (FPGA) or raw iteration count (simulation)
-                    int meshIdx = y * width + x;
-                    verts3D[meshIdx] = new Vector3(x * xyScale, depth * depthScale, y * xyScale);
-                    vertColors3D[meshIdx] = palette[category];
-                }
+                byte intensity = (byte)((depth * 255) / depthMax);
+                valPixels[bufPos] = PlasmaColor(intensity);
+
+                //3d:
+                int meshIdx = y * width + x;
+                verts3D[meshIdx] = new Vector3(x * xyScale, depth * depthScale, y * xyScale);
+                vertColors3D[meshIdx] = palette[category];
             }
-
-            texCategory.SetPixels32(catPixels);
-            texValue.SetPixels32(valPixels);
-            texCategory.Apply();
-            texValue.Apply();
-
-            categoryImage.texture = texCategory;
-            valueImage.texture = texValue;
-            
-            //3d:
-            runtimeMesh.vertices = verts3D;
-            runtimeMesh.colors32 = vertColors3D;
-            runtimeMesh.triangles = tris3D;
-            runtimeMesh.RecalculateNormals();
-            runtimeMesh.RecalculateBounds();
         }
+
+        texCategory.SetPixels32(catPixels);
+        texValue.SetPixels32(valPixels);
+        texCategory.Apply();
+        texValue.Apply();
+
+        categoryImage.texture = texCategory;
+        valueImage.texture = texValue;
+
+        //3d:
+        runtimeMesh.vertices = verts3D;
+        runtimeMesh.colors32 = vertColors3D;
+        runtimeMesh.triangles = tris3D;
+        runtimeMesh.RecalculateNormals();
+        runtimeMesh.RecalculateBounds();
     }
 
     public void SetCategoryVisible(bool visible)
