@@ -1,37 +1,83 @@
 using UnityEngine;
-using System.Collections;
 using UnityEngine.InputSystem;
-using Mono.Cecil.Cil;
-using UnityEditor;
-using UnityEngine.SocialPlatforms.GameCenter;
-
 
 public class PanZoom : MonoBehaviour
 {
-    private Vector2 center = new Vector2(0, 0);
-    private Vector2 mouseDelta = new Vector2(0, 0);
-    void Start()
+    // Simulation window coord center and size, used to check if user window is still within Simulation Window
+    // Simulation window is centered at 0, so implicitly simCenter = 0f
+    private const float simHalfSize = 1.8f;
+
+    // Center and halfSize of the window the user is setting
+    private Vector2 center = Vector2.zero;
+    private float halfSize = 1.8f;
+
+    // Panning variables
+    private Vector2 deltaMouse = Vector2.zero;
+    // deltaMouse returns the number of pixels the cursor has moved across, scale it down
+    private float panningSensitivity = 0.001f;
+
+    // Zooming variables
+    private float zoomFactor = 0.9f;
+    private float maxHalfSize = 1.8f;
+    [SerializeField] private float minHalfSize = 0.2f; // Trial and error to determine when zooming in becomes too blocky
+
+    void Update()
     {
-        Debug.Log(center);
-        Debug.Log(mouseDelta);
+        center = ApplyPan(center, deltaMouse);
+        deltaMouse = Vector2.zero;
     }
 
-    void FixedUpdate()
+
+    void OnZoom(InputValue input)
     {
-        center -= mouseDelta; // mouse dragging left moves the fov to the right and vice versa
-        mouseDelta = new Vector2(0, 0);
-        Debug.Log(center);
+        float scroll = input.Get<Vector2>().y;
+        float candidateHalfSize = halfSize;
+        // We ignore when scroll == 0, halfSize doesn't change
+        if (scroll > 0)
+        {
+            Debug.Log("New Input: Zooming in...");
+            candidateHalfSize *= zoomFactor;
+            candidateHalfSize = Mathf.Max(candidateHalfSize, minHalfSize);
+        }
+        else if (scroll < 0)
+        {
+            Debug.Log("New Input: Zooming out...");
+            candidateHalfSize /= zoomFactor;
+            candidateHalfSize = Mathf.Min(candidateHalfSize, maxHalfSize);
+        }
+
+        if (!Violate(center, candidateHalfSize))
+        {
+            halfSize = candidateHalfSize;
+        }
     }
+
+
     void OnPan(InputValue input)
     {
-        mouseDelta = input.Get<Vector2>();
+        Debug.Log("Panning detected...");
+        deltaMouse = input.Get<Vector2>();
+
+        Vector2 candidateCenter = ApplyPan(center, deltaMouse);
+        if (Violate(candidateCenter, halfSize))
+        {
+            deltaMouse = Vector2.zero;
+        }
     }
-    void OnZoomIn()
+
+    Vector2 ApplyPan(Vector2 currentCenter, Vector2 currentDeltaMouse)
     {
-        Debug.Log("Zooming in");
+        return currentCenter - currentDeltaMouse * panningSensitivity;
     }
-    void OnZoomOut()
+
+
+    bool Violate(Vector2 currentCenter, float currentHalfSize)
     {
-        Debug.Log("Zooming out");
+        float x_min = currentCenter.x - currentHalfSize;
+        float x_max = currentCenter.x + currentHalfSize;
+        float y_min = currentCenter.y - currentHalfSize;
+        float y_max = currentCenter.y + currentHalfSize;
+
+        return x_min < -simHalfSize || x_max > simHalfSize || y_min < -simHalfSize || y_max > simHalfSize;
     }
 }

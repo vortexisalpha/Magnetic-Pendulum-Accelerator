@@ -17,21 +17,21 @@
                 },
                 {
                     "name": "ZoomIn",
-                    "type": "Button",
+                    "type": "Value",
                     "id": "1b845670-648f-4a4c-a2eb-48746400b882",
-                    "expectedControlType": "",
+                    "expectedControlType": "Axis",
                     "processors": "",
                     "interactions": "",
-                    "initialStateCheck": false
+                    "initialStateCheck": true
                 },
                 {
-                    "name": "ZoomOut",
-                    "type": "Button",
+                    "name": "Zoom",
+                    "type": "Value",
                     "id": "5ec1a942-f715-468a-a2ab-677563fce6a5",
                     "expectedControlType": "",
                     "processors": "",
                     "interactions": "",
-                    "initialStateCheck": false
+                    "initialStateCheck": true
                 }
             ],
             "bindings": [
@@ -69,48 +69,26 @@
                     "isPartOfComposite": true
                 },
                 {
-                    "name": "One Modifier",
-                    "id": "e679ae38-1074-42e0-a926-697eb1d775af",
-                    "path": "OneModifier",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "",
-                    "action": "ZoomIn",
-                    "isComposite": true,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "binding",
-                    "id": "6138eb56-b529-487e-9d2b-680625a41ead",
+                    "name": "",
+                    "id": "76c4ecb2-67e1-42ac-bc5f-42468e0ba63f",
                     "path": "<Mouse>/scroll/up",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
                     "action": "ZoomIn",
                     "isComposite": false,
-                    "isPartOfComposite": true
-                },
-                {
-                    "name": "One Modifier",
-                    "id": "309783d9-243e-488f-9e19-1529d0dfc975",
-                    "path": "OneModifier",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "",
-                    "action": "ZoomOut",
-                    "isComposite": true,
                     "isPartOfComposite": false
                 },
                 {
-                    "name": "binding",
-                    "id": "35eb852a-4518-48ac-9645-ab419d89dc0c",
-                    "path": "<Mouse>/scroll/down",
+                    "name": "",
+                    "id": "2aa8ddb1-6cac-40b1-9b6f-7d329042ed92",
+                    "path": "<Mouse>/scroll",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "ZoomOut",
+                    "action": "Zoom",
                     "isComposite": false,
-                    "isPartOfComposite": true
+                    "isPartOfComposite": false
                 }
             ]
         },
