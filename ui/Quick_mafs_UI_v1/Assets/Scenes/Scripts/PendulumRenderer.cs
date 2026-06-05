@@ -9,10 +9,10 @@ public class PendulumRenderer : MonoBehaviour
     [SerializeField] private RawImage valueImage;
 
     Color32[] palette = {
-                new Color32(0,0,255,255),  //00
-                new Color32(0,255,0,255),  //01
-                new Color32(255,0,0,255),  //10
-                new Color32(0,0,0,255), //11
+                new Color32(30,30,30,255),   // magnet_id 0 — timeout
+                new Color32(255,0,0,255),     // magnet_id 1 — magnet_0 red
+                new Color32(0,255,0,255),     // magnet_id 2 — magnet_1 green
+                new Color32(0,0,255,255),    // magnet_id 3 — magnet_2 blue
             };
 
     //3D stuff:

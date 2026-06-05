@@ -22,12 +22,11 @@ public class MagnetRenderer : MonoBehaviour
     private Color32[] pixels;
     private readonly Color32 bg = new Color32(40, 40, 40, 255);
 
-    private Color32[] palette =
+    private static readonly Color32[] MagnetPalette =
     {
-        new Color32(0,0,255,255),
-        new Color32(0,255,0,255),
-        new Color32(255,0,0,255),
-        new Color32(0,0,0,0)
+        new Color32(255, 0, 0, 255),   // magnet_0 — red
+        new Color32(0, 255, 0, 255),   // magnet_1 — green
+        new Color32(0, 0, 255, 255),   // magnet_2 — blue
     };
 
     void Start()
@@ -78,17 +77,18 @@ public class MagnetRenderer : MonoBehaviour
     void ApplyInfo(InfoMessage info)
     {
         ClearPixels();
-        int idx = 0;
         foreach (var coord in info.magnets)
         {
+            if (!TryParseMagnetIndex(coord.Key, out int magnetIdx))
+                continue;
+
             //Flask server holds simulation coord values
             //rawImage on MagnetSim uses pixel coordinates, mapping is required
             int px = (int)Mathf.Round(W / (SIM_CORNER * 2) * (coord.Value.x + 1.8f));
             int py = (int)Mathf.Round(-W / (SIM_CORNER * 2) * (coord.Value.y - 1.8f));
 
-            var color = palette[idx % palette.Length]; // % is just for safety realistically we never have more than 4 magnets (for now).
+            var color = MagnetPalette[magnetIdx % MagnetPalette.Length];
             DrawCircle(px, py, magnetRadius, color);
-            idx++;
         }
         tex.SetPixels32(pixels);
         tex.Apply();
@@ -104,6 +104,14 @@ public class MagnetRenderer : MonoBehaviour
     void ClearPixels()
     {
         for (int i = 0; i < pixels.Length; i++) pixels[i] = bg;
+    }
+
+    static bool TryParseMagnetIndex(string key, out int index)
+    {
+        index = -1;
+        if (string.IsNullOrEmpty(key) || !key.StartsWith("magnet_"))
+            return false;
+        return int.TryParse(key.Substring("magnet_".Length), out index) && index >= 0;
     }
 
     void DrawCircle(int cx, int cy, int r, Color32 color)
