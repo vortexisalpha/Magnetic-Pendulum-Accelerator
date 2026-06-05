@@ -3,8 +3,11 @@ module lane_main #(
     parameter F = 14,
     parameter LUT_SIZE = 4096, // 4096 entries
     parameter LUT_ADDR_W = 12, // 2^12 = 4096
-    parameter Q_WIDTH = 18 // 0 to 26.2225 and everything else must be fractional.
+    parameter Q_WIDTH = 18, // 0 to 26.2225 and everything else must be fractional.
     //therefore for q width use Q 5.13 implementation. unsigned
+    parameter IMG_W = 160,
+    parameter IMG_H = 120,
+    localparam ID_W = $clog2(IMG_W * IMG_H)
 )(
     input clk,
     input rst,
@@ -32,7 +35,7 @@ module lane_main #(
     input logic pixel_valid,
     input logic signed [W-1:0] pixel_x, pixel_y, pixel_vx, pixel_vy,
     input logic [11:0] pixel_step_cnt, //12 bits = 4096 steps max
-    input logic [14:0] pixel_id, //15 bits = 32768 pixels max and therefore fits inside 160x120
+    input logic [ID_W-1:0] pixel_id, //15 bits = 32768 pixels max and therefore fits inside 160x120
 
     //used to count how many times the pixel has 'settled'
     input logic [1:0] settle_count,
@@ -44,7 +47,7 @@ module lane_main #(
     output logic out_valid,
     output logic signed [W-1:0] out_x, out_y, out_vx, out_vy,
     output logic [11:0] out_step_cnt,
-    output logic [14:0] out_id,
+    output logic [ID_W-1:0] out_id,
     output logic [1:0] out_magnet_id,
 
     output logic [1:0] out_settle_count
@@ -59,7 +62,7 @@ logic signed [W-1:0] s1_dx0, s1_dy0, s1_dx1, s1_dy1, s1_dx2, s1_dy2;
 logic signed [W-1:0] s1_dx0_w, s1_dy0_w, s1_dx1_w, s1_dy1_w, s1_dx2_w, s1_dy2_w;
 logic signed [W-1:0] s1_x, s1_y, s1_vx, s1_vy;
 logic [11:0] s1_step_cnt;
-logic [14:0] s1_id;
+logic [ID_W-1:0] s1_id;
 logic s1_valid;
 
 logic [1:0] s1_settle_count;
@@ -102,7 +105,7 @@ end
 logic signed [W-1:0] s2a_dx0, s2a_dy0, s2a_dx1, s2a_dy1, s2a_dx2, s2a_dy2;
 logic signed [W-1:0] s2a_x, s2a_y, s2a_vx, s2a_vy;
 logic [11:0] s2a_step_cnt;
-logic [14:0] s2a_id;
+logic [ID_W-1:0] s2a_id;
 logic s2a_valid;
 logic [1:0] s2a_settle_count;
 
@@ -150,7 +153,7 @@ logic signed [W-1:0] s2b_dx0, s2b_dy0, s2b_dx1, s2b_dy1, s2b_dx2, s2b_dy2;
 logic signed [W-1:0] s2b_dx0_sq, s2b_dy0_sq, s2b_dx1_sq, s2b_dy1_sq, s2b_dx2_sq, s2b_dy2_sq;
 logic signed [W-1:0] s2b_x, s2b_y, s2b_vx, s2b_vy;
 logic [11:0] s2b_step_cnt;
-logic [14:0] s2b_id;
+logic [ID_W-1:0] s2b_id;
 logic s2b_valid;
 
 logic [1:0] s2b_settle_count;
@@ -200,7 +203,7 @@ logic signed [W-1:0] s3a_dx0, s3a_dy0, s3a_dx1, s3a_dy1, s3a_dx2, s3a_dy2;
 
 logic signed [W-1:0] s3a_x, s3a_y, s3a_vx, s3a_vy;
 logic [11:0] s3a_step_cnt;
-logic [14:0] s3a_id;
+logic [ID_W-1:0] s3a_id;
 logic s3a_valid;
 
 logic [1:0] s3a_settle_count;
@@ -251,7 +254,7 @@ logic [Q_WIDTH-1:0]  s3b_min_q;
 logic signed [W-1:0] s3b_dx0, s3b_dy0, s3b_dx1, s3b_dy1, s3b_dx2, s3b_dy2;
 logic signed [W-1:0] s3b_x, s3b_y, s3b_vx, s3b_vy;
 logic [11:0]         s3b_step_cnt;
-logic [14:0]         s3b_id;
+logic [ID_W-1:0]         s3b_id;
 logic [1:0]          s3b_settle_count;
 
 logic [Q_WIDTH-1:0]  s3b_q0, s3b_q1, s3b_q2;
@@ -259,7 +262,9 @@ logic [Q_WIDTH-1:0]  s3b_q0, s3b_q1, s3b_q2;
 nearest_magnet_s3 #(
     .W(W),
     .F(F),
-    .Q_WIDTH(Q_WIDTH)
+    .Q_WIDTH(Q_WIDTH),
+    .IMG_W(IMG_W),
+    .IMG_H(IMG_H)
 ) nearest_magnet_stage3b (
     .clk(clk),
     .rst(rst),
@@ -319,7 +324,7 @@ logic                       s3c_valid;
 logic signed [W-1:0]        s3c_dx0, s3c_dy0, s3c_dx1, s3c_dy1, s3c_dx2, s3c_dy2;
 logic signed [W-1:0]        s3c_x, s3c_y, s3c_vx, s3c_vy;
 logic [11:0]                s3c_step_cnt;
-logic [14:0]                s3c_id;
+logic [ID_W-1:0]                s3c_id;
 logic [1:0]                 s3c_nearest_magnet_id;
 logic [1:0]                 s3c_settle_count;
 
@@ -328,7 +333,9 @@ logic [Q_WIDTH-1:0] s3c_q0, s3c_q1, s3c_q2;
 settle_check_s3 #(
     .W(W),
     .F(F),
-    .Q_WIDTH(Q_WIDTH)
+    .Q_WIDTH(Q_WIDTH),
+    .IMG_W(IMG_W),
+    .IMG_H(IMG_H)
 ) settle_check_stage3c (
     .clk(clk),
     .rst(rst),
@@ -396,7 +403,7 @@ logic signed [W-1:0] s4a_invq0, s4a_invq1, s4a_invq2;
 logic signed [W-1:0] s4a_dx0, s4a_dy0, s4a_dx1, s4a_dy1, s4a_dx2, s4a_dy2;
 logic signed [W-1:0] s4a_x, s4a_y, s4a_vx, s4a_vy;
 logic [11:0] s4a_step_cnt;
-logic [14:0] s4a_id;
+logic [ID_W-1:0] s4a_id;
 logic s4a_valid;
 
 logic [1:0] s4a_magnet_id;
@@ -456,7 +463,7 @@ logic signed [W-1:0] s4b_invq0, s4b_invq1, s4b_invq2;
 logic signed [W-1:0] s4b_dx0, s4b_dy0, s4b_dx1, s4b_dy1, s4b_dx2, s4b_dy2;
 logic signed [W-1:0] s4b_x, s4b_y, s4b_vx, s4b_vy;
 logic [11:0] s4b_step_cnt;
-logic [14:0] s4b_id;
+logic [ID_W-1:0] s4b_id;
 logic s4b_valid;
 
 logic [1:0] s4b_magnet_id;
@@ -497,7 +504,7 @@ end
 logic signed [W-1:0] s5a_dx0, s5a_dy0, s5a_dx1, s5a_dy1, s5a_dx2, s5a_dy2;
 logic signed [W-1:0] s5a_x, s5a_y, s5a_vx, s5a_vy;
 logic [11:0] s5a_step_cnt;
-logic [14:0] s5a_id;
+logic [ID_W-1:0] s5a_id;
 logic s5a_valid;
 logic [1:0] s5a_magnet_id;
 logic [1:0] s5a_settle_count;
@@ -546,7 +553,7 @@ logic signed [W-1:0] s5b_dx_invq0, s5b_dx_invq1, s5b_dx_invq2;
 logic signed [W-1:0] s5b_dy_invq0, s5b_dy_invq1, s5b_dy_invq2;
 logic signed [W-1:0] s5b_x, s5b_y, s5b_vx, s5b_vy;
 logic [11:0] s5b_step_cnt;
-logic [14:0] s5b_id;
+logic [ID_W-1:0] s5b_id;
 logic s5b_valid;
 logic [1:0] s5b_magnet_id;
 
@@ -586,7 +593,7 @@ logic signed [W-1:0] s6a_dx_invq0, s6a_dx_invq1, s6a_dx_invq2;
 logic signed [W-1:0] s6a_dy_invq0, s6a_dy_invq1, s6a_dy_invq2;
 logic signed [W-1:0] s6a_x, s6a_y, s6a_vx, s6a_vy;
 logic [11:0] s6a_step_cnt;
-logic [14:0] s6a_id;
+logic [ID_W-1:0] s6a_id;
 logic s6a_valid;
 logic [1:0] s6a_magnet_id;
 logic [1:0] s6a_settle_count;
@@ -637,7 +644,7 @@ fx_adder_s6 #(.W(W), .F(F)) dy_invq_adder (.a(s6a_dy_invq0), .b(s6a_dy_invq1), .
 //outputs
 logic signed [W-1:0] s6b_x, s6b_y, s6b_vx, s6b_vy;
 logic [11:0] s6b_step_cnt;
-logic [14:0] s6b_id;
+logic [ID_W-1:0] s6b_id;
 logic s6b_valid;
 logic [1:0] s6b_magnet_id;
 logic [1:0] s6b_settle_count;
@@ -679,7 +686,7 @@ end
 //outputs
 logic signed [W-1:0] s6c_x, s6c_y, s6c_vx, s6c_vy;
 logic [11:0] s6c_step_cnt;
-logic [14:0] s6c_id;
+logic [ID_W-1:0] s6c_id;
 logic s6c_valid;
 logic [1:0] s6c_magnet_id;
 logic [1:0] s6c_settle_count;
@@ -721,7 +728,7 @@ end
 //outputs
 logic signed [W-1:0] s6d_x, s6d_y, s6d_vx, s6d_vy;
 logic [11:0] s6d_step_cnt;
-logic [14:0] s6d_id;
+logic [ID_W-1:0] s6d_id;
 logic s6d_valid;
 
 logic [1:0] s6d_settle_count;
@@ -763,7 +770,7 @@ end
 //outputs
 logic signed [W-1:0] s6e_x, s6e_y, s6e_vx, s6e_vy;
 logic [11:0] s6e_step_cnt;
-logic [14:0] s6e_id;
+logic [ID_W-1:0] s6e_id;
 logic s6e_valid;
 logic [1:0] s6e_magnet_id;
 
@@ -806,7 +813,7 @@ end
 
 logic signed [W-1:0] s7a_x, s7a_y, s7a_vx, s7a_vy;
 logic [11:0] s7a_step_cnt;
-logic [14:0] s7a_id;
+logic [ID_W-1:0] s7a_id;
 logic s7a_valid;
 logic [1:0] s7a_magnet_id;
 
@@ -842,7 +849,7 @@ end
 //outputs
 logic signed [W-1:0] s7b_x, s7b_y, s7b_vx, s7b_vy;
 logic [11:0] s7b_step_cnt;
-logic [14:0] s7b_id;
+logic [ID_W-1:0] s7b_id;
 logic s7b_valid;
 logic [1:0] s7b_magnet_id;
 
@@ -881,7 +888,7 @@ end
 
 logic signed [W-1:0] s7c_x, s7c_y, s7c_vx, s7c_vy;
 logic [11:0] s7c_step_cnt;
-logic [14:0] s7c_id;
+logic [ID_W-1:0] s7c_id;
 logic s7c_valid;
 logic [1:0] s7c_magnet_id;
 
@@ -920,7 +927,7 @@ end
 //outputs
 logic signed [W-1:0] s8a_x, s8a_y, s8a_vx, s8a_vy;
 logic [11:0] s8a_step_cnt;
-logic [14:0] s8a_id;
+logic [ID_W-1:0] s8a_id;
 logic s8a_valid;
 logic [1:0] s8a_magnet_id;
 logic [1:0] s8a_settle_count;
@@ -956,7 +963,7 @@ end
 //outputs
 logic signed [W-1:0] s8b_x, s8b_y, s8b_vx, s8b_vy;
 logic [11:0] s8b_step_cnt;
-logic [14:0] s8b_id;
+logic [ID_W-1:0] s8b_id;
 logic s8b_valid;
 logic [1:0] s8b_settle_count;
 logic [1:0] s8b_magnet_id;
