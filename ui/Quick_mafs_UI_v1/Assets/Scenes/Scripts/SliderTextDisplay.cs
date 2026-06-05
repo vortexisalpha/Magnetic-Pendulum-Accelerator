@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using TMPro;
 
 public class SliderTextDisplay : MonoBehaviour
@@ -20,17 +21,30 @@ public class SliderTextDisplay : MonoBehaviour
             slider = GetComponentInParent<Slider>();
 
         if (slider != null)
+        {
             slider.SetValueWithoutNotify(0f);
+            BindSliderRelease(slider.gameObject);
+        }
 
         valChange(0f);
     }
-    public void valChange(float value)
+
+    static void BindSliderRelease(GameObject sliderObject)
     {
-        displayValue = paramMin + (paramMax - paramMin) * value;
-        sliderVal.text = displayValue.ToString("0.00");
-        SliderToImageTimer.OnSliderChanged();
-        FlaskManager.PostControllerDataNow();
+        var trigger = sliderObject.GetComponent<EventTrigger>();
+        if (trigger == null)
+            trigger = sliderObject.AddComponent<EventTrigger>();
+
+        var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerUp };
+        entry.callback.AddListener(_ => FlaskManager.NotifySliderReleased());
+        trigger.triggers.Add(entry);
     }
 
-
+    public void valChange(float value)
+    {
+        displayValue = Mathf.Round((paramMin + (paramMax - paramMin) * value) * 100f) / 100f;
+        sliderVal.text = displayValue.ToString("0.00");
+        SliderToImageTimer.OnSliderChanged();
+        FlaskManager.NotifySliderChanged();
+    }
 }

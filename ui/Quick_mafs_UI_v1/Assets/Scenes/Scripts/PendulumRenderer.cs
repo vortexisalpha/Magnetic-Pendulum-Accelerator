@@ -96,6 +96,10 @@ public class PendulumRenderer : MonoBehaviour
 
     void ApplyImage(ImageMessage msg)
     {
+        if (PynqConnection.Instance != null &&
+            msg.version <= PynqConnection.Instance.MinAcceptedImageVersion)
+            return;
+
         ImagePostToFrameTimer.OnImageReceived(msg);
         SliderToImageTimer.OnImageFetched(msg.version);
 

@@ -52,6 +52,12 @@ public class PynqConnection : MonoBehaviour
     public InfoMessage LatestInfo { get; private set; }
     public bool IsConnected => connected;
 
+    /// <summary>Monotonic counter bumped on each flushed PARAMS frame.</summary>
+    public int LatestSentParamVersion { get; private set; }
+
+    /// <summary>Drop IMAGE frames at or below this FPGA version (set when params are sent).</summary>
+    public int MinAcceptedImageVersion { get; private set; }
+
     //threading
     private Thread ioThread;
     private volatile bool running;
@@ -62,6 +68,15 @@ public class PynqConnection : MonoBehaviour
     private readonly object writeLock = new object();
 
     private readonly ConcurrentQueue<object> inbound = new ConcurrentQueue<object>();
+    private readonly ConcurrentQueue<byte[]> outbound = new ConcurrentQueue<byte[]>();
+    private byte[] pendingParamsFrame;
+    private float pendingDampingFactor, pendingMagneticStrength, pendingPendulumLength, pendingPendulumHeight;
+    private int pendingParamVersion;
+    private int pendingMinAcceptedImageVersion;
+    private readonly object outboundLock = new object();
+
+    private float lastSentDampingFactor, lastSentMagneticStrength, lastSentPendulumLength, lastSentPendulumHeight;
+    private bool hasSentParams;
 
     void Awake()
     {
@@ -79,7 +94,6 @@ public class PynqConnection : MonoBehaviour
 
     void Update()
     {
-        //pop from event queue and test for type of event
         while (inbound.TryDequeue(out object msg))
         {
             switch (msg)
@@ -104,21 +118,53 @@ public class PynqConnection : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
-    //outgoing: slider params to PARAMS frame
+    //outgoing: slider params coalesce into a single pending frame (latest wins)
     public void SendParams(float dampingFactor, float magneticStrength, float pendulumLength, float pendulumHeight)
     {
+        if (hasSentParams &&
+            dampingFactor == lastSentDampingFactor &&
+            magneticStrength == lastSentMagneticStrength &&
+            pendulumLength == lastSentPendulumLength &&
+            pendulumHeight == lastSentPendulumHeight)
+            return;
+
+        lock (outboundLock)
+        {
+            if (pendingParamsFrame != null &&
+                dampingFactor == pendingDampingFactor &&
+                magneticStrength == pendingMagneticStrength &&
+                pendulumLength == pendingPendulumLength &&
+                pendulumHeight == pendingPendulumHeight)
+                return;
+        }
+
+        int paramVersion = LatestSentParamVersion + 1;
+        int minImageVersion = PendulumRenderer.LastFetchedVersion;
+
         string json = JsonConvert.SerializeObject(new
         {
+            version = paramVersion,
             dampingFactor,
             magneticStrength,
             pendulumLength,
             pendulumHeight
         });
-        SendJson(MSG_PARAMS, json);
+        byte[] frame = BuildFrame(MSG_PARAMS, Encoding.UTF8.GetBytes(json));
+
+        lock (outboundLock)
+        {
+            pendingParamsFrame = frame;
+            pendingDampingFactor = dampingFactor;
+            pendingMagneticStrength = magneticStrength;
+            pendingPendulumLength = pendulumLength;
+            pendingPendulumHeight = pendulumHeight;
+            pendingParamVersion = paramVersion;
+            pendingMinAcceptedImageVersion = minImageVersion;
+        }
+
+        FlushOutbound();
     }
 
-    //forward the magnet positions Unity pulled from Flask on to the board,
-    //so the FPGA basin is computed from the same magnets that are displayed.
     public void SendMagnets(Dictionary<string, MagnetCoords> magnets)
     {
         if (magnets == null) return;
@@ -128,14 +174,36 @@ public class PynqConnection : MonoBehaviour
 
     private void SendJson(byte type, string json)
     {
+        outbound.Enqueue(BuildFrame(type, Encoding.UTF8.GetBytes(json)));
+        FlushOutbound();
+    }
+
+    private void FlushOutbound()
+    {
         if (!connected) return;
 
-        byte[] frame = BuildFrame(type, Encoding.UTF8.GetBytes(json));
         try
         {
             lock (writeLock)
             {
-                stream.Write(frame, 0, frame.Length);
+                lock (outboundLock)
+                {
+                    if (pendingParamsFrame != null)
+                    {
+                        stream.Write(pendingParamsFrame, 0, pendingParamsFrame.Length);
+                        lastSentDampingFactor = pendingDampingFactor;
+                        lastSentMagneticStrength = pendingMagneticStrength;
+                        lastSentPendulumLength = pendingPendulumLength;
+                        lastSentPendulumHeight = pendingPendulumHeight;
+                        hasSentParams = true;
+                        LatestSentParamVersion = pendingParamVersion;
+                        MinAcceptedImageVersion = pendingMinAcceptedImageVersion;
+                        pendingParamsFrame = null;
+                    }
+                }
+
+                while (outbound.TryDequeue(out byte[] frame))
+                    stream.Write(frame, 0, frame.Length);
             }
         }
         catch (Exception e)
@@ -153,7 +221,6 @@ public class PynqConnection : MonoBehaviour
         return frame;
     }
 
-    //background IO thread: connect, read frames, reconnect on drop
     private void IoLoop()
     {
         while (running)
@@ -166,6 +233,7 @@ public class PynqConnection : MonoBehaviour
                 stream = client.GetStream();
                 connected = true;
                 Debug.Log($"[Pynq] connected to {host}:{port}");
+                FlushOutbound();
 
                 ReadFrames();
             }
@@ -176,6 +244,10 @@ public class PynqConnection : MonoBehaviour
             finally
             {
                 connected = false;
+                hasSentParams = false;
+                lock (outboundLock)
+                    pendingParamsFrame = null;
+                while (outbound.TryDequeue(out _)) { }
                 try { stream?.Close(); } catch { }
                 try { client?.Close(); } catch { }
             }
