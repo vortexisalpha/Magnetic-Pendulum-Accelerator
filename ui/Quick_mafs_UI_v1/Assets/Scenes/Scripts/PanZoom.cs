@@ -25,6 +25,7 @@ public class PanZoom : MonoBehaviour
     {
         center = ApplyPan(center, deltaMouse);
         deltaMouse = Vector2.zero;
+        Debug.Log($"Center:{center}, HalfSize: {halfSize}");
     }
 
 
