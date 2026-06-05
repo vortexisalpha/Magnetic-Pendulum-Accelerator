@@ -3,7 +3,7 @@ module frame_buffer #(
     parameter FB_H   = 120,
     parameter DATA_W = 6, // stores step cnt categorized and magnet id
 
-    parameter PIXELS = 19200, // 160 * 120
+    parameter PIXELS = FB_W * FB_H, // 160 * 120
     parameter ADDR_W = $clog2(PIXELS)
 )(
     input  logic    clk,
