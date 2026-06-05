@@ -1,10 +1,12 @@
 using UnityEngine;
+using UnityEngine.UI;
 using TMPro;
 
 public class SliderTextDisplay : MonoBehaviour
 {
     [SerializeField] private TextMeshProUGUI sliderVal = null;
     [SerializeField] private TextMeshProUGUI paramName = null;
+    [SerializeField] private Slider slider = null;
     [SerializeField] private float paramMin, paramMax;
     [SerializeField] private string param;
 
@@ -12,8 +14,15 @@ public class SliderTextDisplay : MonoBehaviour
 
     void Start()
     {
-        sliderVal.text = paramMin.ToString(paramMin);
-        paramName.text = paramMin;
+        paramName.text = param;
+
+        if (slider == null)
+            slider = GetComponentInParent<Slider>();
+
+        if (slider != null)
+            slider.SetValueWithoutNotify(0f);
+
+        valChange(0f);
     }
     public void valChange(float value)
     {
