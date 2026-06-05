@@ -36,7 +36,7 @@ public class SliderTextDisplay : MonoBehaviour
             trigger = sliderObject.AddComponent<EventTrigger>();
 
         var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerUp };
-        entry.callback.AddListener(_ => FlaskManager.NotifySliderReleased());
+        entry.callback.AddListener(_ => PynqParamController.NotifySliderReleased());
         trigger.triggers.Add(entry);
     }
 
@@ -45,6 +45,6 @@ public class SliderTextDisplay : MonoBehaviour
         displayValue = Mathf.Round((paramMin + (paramMax - paramMin) * value) * 100f) / 100f;
         sliderVal.text = displayValue.ToString("0.00");
         SliderToImageTimer.OnSliderChanged();
-        FlaskManager.NotifySliderChanged();
+        PynqParamController.NotifySliderChanged();
     }
 }

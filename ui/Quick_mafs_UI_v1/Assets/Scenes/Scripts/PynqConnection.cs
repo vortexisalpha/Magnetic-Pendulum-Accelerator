@@ -27,11 +27,12 @@ public sealed class InfoMessage
     public Dictionary<string, MagnetCoords> magnets;
 }
 
+// Sole TCP link to the PYNQ/FPGA board: PARAMS + MAGNETS out, IMAGE + INFO in.
 public class PynqConnection : MonoBehaviour
 {
     public static PynqConnection Instance { get; private set; }
 
-    [Header("PYNQ board endpoint")]
+    [Header("PYNQ board TCP endpoint")]
     [SerializeField] private string host = "192.168.2.99";
     [SerializeField] private int port = 12345;
     [Tooltip("Seconds to wait before retrying a dropped/refused connection.")]
@@ -118,7 +119,7 @@ public class PynqConnection : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
-    //outgoing: slider params coalesce into a single pending frame (latest wins)
+    //outgoing PARAMS: slider values coalesce into one pending frame (latest wins)
     public void SendParams(float dampingFactor, float magneticStrength, float pendulumLength, float pendulumHeight)
     {
         if (hasSentParams &&

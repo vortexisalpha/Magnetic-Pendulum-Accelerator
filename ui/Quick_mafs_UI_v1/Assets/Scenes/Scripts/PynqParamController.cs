@@ -9,18 +9,18 @@ public class ControlData
     public float pendulumHeight;
 }
 
-// Debounced, event-driven slider → PYNQ PARAMS over TCP.
-public class FlaskManager : MonoBehaviour
+// Throttled slider → FPGA path via PynqConnection TCP (no Flask).
+public class PynqParamController : MonoBehaviour
 {
-    static FlaskManager instance;
+    static PynqParamController instance;
 
     [SerializeField] GameObject dampingFactorController;
     [SerializeField] GameObject magneticStrengthController;
     [SerializeField] GameObject lengthController;
     [SerializeField] GameObject pendulumHeightController;
 
-    [Tooltip("Seconds to wait after the last slider tick before sending while dragging.")]
-    [SerializeField] private float sendDebounce = 0.15f;
+    [Tooltip("Minimum seconds between PARAMS sends while dragging.")]
+    [SerializeField] private float sendInterval = 0.1f;
 
     private SliderTextDisplay dampingSlider;
     private SliderTextDisplay magneticSlider;
@@ -29,7 +29,7 @@ public class FlaskManager : MonoBehaviour
 
     private ControlData data = new ControlData();
     private bool slidersDirty;
-    private float debounceTimer;
+    private float nextSendAllowedTime;
 
     void Awake()
     {
@@ -43,6 +43,7 @@ public class FlaskManager : MonoBehaviour
         lengthSlider = lengthController.GetComponent<SliderTextDisplay>();
         heightSlider = pendulumHeightController.GetComponent<SliderTextDisplay>();
 
+        nextSendAllowedTime = 0f;
         SendParamsNow();
     }
 
@@ -53,26 +54,23 @@ public class FlaskManager : MonoBehaviour
 
     void Update()
     {
-        if (!slidersDirty)
+        if (!slidersDirty || Time.time < nextSendAllowedTime)
             return;
 
-        debounceTimer -= Time.deltaTime;
-        if (debounceTimer <= 0f)
-            SendParamsNow();
+        SendParamsNow();
     }
 
     public static void NotifySliderChanged()
     {
         if (instance == null) return;
         instance.slidersDirty = true;
-        instance.debounceTimer = instance.sendDebounce;
     }
 
     public static void NotifySliderReleased()
     {
         if (instance == null) return;
         instance.slidersDirty = true;
-        instance.debounceTimer = 0f;
+        instance.nextSendAllowedTime = 0f;
     }
 
     private void SnapshotSliders()
@@ -87,6 +85,7 @@ public class FlaskManager : MonoBehaviour
     {
         SnapshotSliders();
         slidersDirty = false;
+        nextSendAllowedTime = Time.time + sendInterval;
 
         if (PynqConnection.Instance == null) return;
         PynqConnection.Instance.SendParams(
