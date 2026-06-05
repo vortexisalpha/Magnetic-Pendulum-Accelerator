@@ -18,12 +18,12 @@ public class PanZoom : MonoBehaviour
     // Panning variables
     private Vector2 deltaMouse = Vector2.zero;
     // deltaMouse returns the number of pixels the cursor has moved across, scale it down
-    [SerializeField] private float panningSensitivity = 0.001f;
+    [SerializeField] private float panningSensitivity = 0.01f;
 
     // Zooming variables
     private float zoomFactor = 0.9f;
     private float maxHalfSize = 1.8f;
-    [SerializeField] private float minHalfSize = 0.2f; // Trial and error to determine when zooming in becomes too blocky
+    [SerializeField] private float minHalfSize = 0.01f; // Trial and error to determine when zooming in becomes too blocky
 
     void Update()
     {
