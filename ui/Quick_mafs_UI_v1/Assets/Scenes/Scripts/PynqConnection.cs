@@ -13,7 +13,7 @@ public sealed class ImageMessage
     public int height;
     public int bitDepth;
     public int version;
-    public int[] pixels;   // flat, length width*height, row-major (pixels[y*width + x])
+    public int[] pixels;
 }
 
 public sealed class MagnetCoords
@@ -27,7 +27,6 @@ public sealed class InfoMessage
     public Dictionary<string, MagnetCoords> magnets;
 }
 
-// Sole TCP link to the PYNQ/FPGA board: PARAMS + MAGNETS out, IMAGE + INFO in.
 public class PynqConnection : MonoBehaviour
 {
     public static PynqConnection Instance { get; private set; }
@@ -53,10 +52,8 @@ public class PynqConnection : MonoBehaviour
     public InfoMessage LatestInfo { get; private set; }
     public bool IsConnected => connected;
 
-    /// <summary>Monotonic counter bumped on each flushed PARAMS frame.</summary>
     public int LatestSentParamVersion { get; private set; }
 
-    /// <summary>Drop IMAGE frames at or below this FPGA version (set when params are sent).</summary>
     public int MinAcceptedImageVersion { get; private set; }
 
     //threading
@@ -119,7 +116,6 @@ public class PynqConnection : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
-    //outgoing PARAMS: slider values coalesce into one pending frame (latest wins)
     public void SendParams(float dampingFactor, float magneticStrength, float pendulumLength, float pendulumHeight)
     {
         if (hasSentParams &&
