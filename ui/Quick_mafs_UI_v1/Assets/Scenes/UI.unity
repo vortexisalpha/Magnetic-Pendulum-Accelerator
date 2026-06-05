@@ -1510,7 +1510,7 @@ MonoBehaviour:
   magneticStrengthController: {fileID: 1546847993}
   lengthController: {fileID: 1854858394}
   pendulumHeightController: {fileID: 816913695}
-  postInterval: 0.1
+  sendInterval: 0.1
 --- !u!4 &1681762938
 Transform:
   m_ObjectHideFlags: 0
