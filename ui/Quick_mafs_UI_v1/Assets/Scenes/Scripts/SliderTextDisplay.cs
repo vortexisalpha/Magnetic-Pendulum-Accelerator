@@ -12,8 +12,8 @@ public class SliderTextDisplay : MonoBehaviour
 
     void Start()
     {
-        sliderVal.text = paramMin.ToString("0.00");
-        paramName.text = param;
+        sliderVal.text = paramMin.ToString(paramMin);
+        paramName.text = paramMin;
     }
     public void valChange(float value)
     {
