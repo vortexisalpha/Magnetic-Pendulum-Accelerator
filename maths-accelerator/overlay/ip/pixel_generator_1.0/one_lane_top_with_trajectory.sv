@@ -1,4 +1,4 @@
-// Overall 8 lanes
+// Overall 9 lanes
 // implementation of one lane,
 // each lane corresponds to one horizontal slice of the overall pixel grid
 
@@ -11,7 +11,7 @@ module one_lane_top #(
     parameter IMG_W = 160,
     parameter IMG_H = 120,
     parameter LANE_ID   = 0,  // 0..NUM_LANES-1
-    parameter NUM_LANES = 8
+    parameter NUM_LANES = 9
 )(
     input logic clk,
     input logic rst,
@@ -31,8 +31,8 @@ module one_lane_top #(
     input logic [1:0]  consec_settle_count,
     input logic [11:0] max_steps,
 
-    // BRAM read port — local address within this lane's frame buffer (0..SLICE_PIXELS-1)
-    input  logic [11:0] fb_rd_addr,
+    // BRAM read port - local address within this lane's frame buffer (0..SLICE_PIXELS-1)
+    input  logic [$clog2((IMG_H/NUM_LANES)*IMG_W)-1:0] fb_rd_addr,
     output logic [5:0]  fb_rd_data,
 
     // trajectory input
@@ -48,10 +48,11 @@ module one_lane_top #(
 );
 
     // Strip-partitioning localparams
-    localparam SLICE_H        = IMG_H / NUM_LANES;              // rows per lane (15)
-    localparam Q_OFFSET       = IMG_H - 1 - LANE_ID * SLICE_H; // coord-mapper q base
-    localparam PIXEL_ID_BASE  = LANE_ID * SLICE_H * IMG_W;     // global pixel-id offset
-    localparam SLICE_PIXELS   = SLICE_H * IMG_W;               // pixels per lane (2400)
+    localparam SLICE_H        = IMG_H / NUM_LANES;
+    localparam Q_OFFSET       = IMG_H - 1 - LANE_ID * SLICE_H;
+    localparam PIXEL_ID_BASE  = LANE_ID * SLICE_H * IMG_W;
+    localparam SLICE_PIXELS   = SLICE_H * IMG_W;
+    localparam LOCAL_W        = $clog2(SLICE_PIXELS);
 
     // scanner
     logic [$clog2(IMG_W)-1:0] scan_p;
@@ -103,7 +104,7 @@ module one_lane_top #(
         .x_min(x_min), .y_min(y_min),
         .x_step(x_step), .y_step(y_step),
         .p(scan_p),
-        .q(Q_OFFSET - scan_q), // Changed from IMG_H-1 to Q_OFFSET
+        .q(($clog2(IMG_H))'(Q_OFFSET) - scan_q),
         .valid_out(coord_mapper_valid_out),
         .x0(x0), .y0(y0),
         .init_step_cnt(init_step_cnt),
@@ -169,7 +170,7 @@ module one_lane_top #(
         end
     end
 
-    lane_main #(.W(W), .F(F), .LUT_SIZE(LUT_SIZE), .LUT_ADDR_W(LUT_ADDR_W), .Q_WIDTH(Q_WIDTH)) u_lane_main (
+    lane_main #(.W(W), .F(F), .LUT_SIZE(LUT_SIZE), .LUT_ADDR_W(LUT_ADDR_W), .Q_WIDTH(Q_WIDTH), .IMG_W(IMG_W), .IMG_H(IMG_H)) u_lane_main (
         .clk(clk), .rst(rst),
         .mag0_x(mag0_x), .mag0_y(mag0_y),
         .mag1_x(mag1_x), .mag1_y(mag1_y),
@@ -226,12 +227,12 @@ module one_lane_top #(
 
     logic fb_wr_en;
     logic [$clog2(IMG_W * IMG_H)-1:0] fb_wr_offset;
-    logic [11:0] fb_wr_addr;
+    logic [LOCAL_W-1:0] fb_wr_addr;
     logic [5:0]  fb_wr_data;
 
     assign fb_wr_en     = out_valid && pixel_done;
     assign fb_wr_offset = out_id - ($clog2(IMG_W * IMG_H))'(PIXEL_ID_BASE);
-    assign fb_wr_addr   = fb_wr_offset[11:0];
+    assign fb_wr_addr   = fb_wr_offset[LOCAL_W-1:0];
     assign fb_wr_data   = {step_category, out_magnet_id};
 
     frame_buffer #(
@@ -244,11 +245,11 @@ module one_lane_top #(
         .rd_addr(fb_rd_addr), .rd_data(fb_rd_data)
     );
 
-    logic [11:0] done_count;  // 12 bits: enough for SLICE_PIXELS=2400
+    logic [LOCAL_W:0] done_count;  // one bit wider so it counts up to SLICE_PIXELS
     always_ff @(posedge clk) begin
         if (rst || !start) done_count <= '0;
         else if (fb_wr_en) done_count <= done_count + 1;
     end
-    assign frame_done = (done_count >= 12'(SLICE_PIXELS));
+    assign frame_done = (done_count >= (LOCAL_W+1)'(SLICE_PIXELS));
 
 endmodule
