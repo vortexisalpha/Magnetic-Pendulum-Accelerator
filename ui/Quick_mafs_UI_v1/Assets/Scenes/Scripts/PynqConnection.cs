@@ -115,10 +115,6 @@ public class PynqConnection : MonoBehaviour
             pendulumHeight
         });
         SendJson(MSG_PARAMS, json);
-        Debug.Log(dampingFactor);
-        Debug.Log(magneticStrength);
-        Debug.Log(pendulumLength);
-        Debug.Log(pendulumHeight);
     }
 
     //forward the magnet positions Unity pulled from Flask on to the board,
