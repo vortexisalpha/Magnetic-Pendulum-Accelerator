@@ -18,6 +18,7 @@ public class PynqParamController : MonoBehaviour
     [SerializeField] GameObject magneticStrengthController;
     [SerializeField] GameObject lengthController;
     [SerializeField] GameObject pendulumHeightController;
+    [SerializeField] GameObject panZoomController;
 
     [Tooltip("Minimum seconds between PARAMS sends while dragging.")]
     [SerializeField] private float sendInterval = 0.1f;
@@ -26,9 +27,11 @@ public class PynqParamController : MonoBehaviour
     private SliderTextDisplay magneticSlider;
     private SliderTextDisplay lengthSlider;
     private SliderTextDisplay heightSlider;
+    private PanZoom panZoom;
 
     private ControlData data = new ControlData();
     private bool slidersDirty;
+    private bool viewportDirty;
     private float nextSendAllowedTime;
 
     void Awake()
@@ -42,9 +45,10 @@ public class PynqParamController : MonoBehaviour
         magneticSlider = magneticStrengthController.GetComponent<SliderTextDisplay>();
         lengthSlider = lengthController.GetComponent<SliderTextDisplay>();
         heightSlider = pendulumHeightController.GetComponent<SliderTextDisplay>();
+        panZoom = panZoomController.GetComponent<PanZoom>();
 
         nextSendAllowedTime = 0f;
-        SendParamsNow();
+        SendNow();
     }
 
     void OnDestroy()
@@ -54,10 +58,10 @@ public class PynqParamController : MonoBehaviour
 
     void Update()
     {
-        if (!slidersDirty || Time.time < nextSendAllowedTime)
+        if (!(slidersDirty || viewportDirty) || Time.time < nextSendAllowedTime)
             return;
 
-        SendParamsNow();
+        SendNow();
     }
 
     public static void NotifySliderChanged()
@@ -66,11 +70,17 @@ public class PynqParamController : MonoBehaviour
         instance.slidersDirty = true;
     }
 
+    public static void NotifyViewportChanged()
+    {
+        if (instance == null) return;
+        instance.viewportDirty = true;
+    }
+
     public static void NotifySliderReleased()
     {
         if (instance == null) return;
         instance.slidersDirty = true;
-        instance.nextSendAllowedTime = 0f;
+        instance.nextSendAllowedTime = 0f; // forcing an immediate send on slider release
     }
 
     private void SnapshotSliders()
@@ -81,17 +91,31 @@ public class PynqParamController : MonoBehaviour
         data.pendulumHeight = heightSlider.displayValue;
     }
 
-    private void SendParamsNow()
+    private void SendNow()
     {
-        SnapshotSliders();
-        slidersDirty = false;
+        if (PynqConnection.Instance == null) return;
+
         nextSendAllowedTime = Time.time + sendInterval;
 
-        if (PynqConnection.Instance == null) return;
-        PynqConnection.Instance.SendParams(
-            data.dampingFactor,
-            data.magneticStrength,
-            data.pendulumLength,
-            data.pendulumHeight);
+        if (slidersDirty)
+        {
+            SnapshotSliders();
+            PynqConnection.Instance.SendParams(
+                data.dampingFactor,
+                data.magneticStrength,
+                data.pendulumLength,
+                data.pendulumHeight);
+            slidersDirty = false;
+        }
+
+        if (viewportDirty)
+        {
+            if (panZoom != null)
+            {
+                panZoom.GetViewportBounds(out float xMin, out float xMax, out float yMin, out float yMax);
+                PynqConnection.Instance.SendViewport(xMin, xMax, yMin, yMax);
+            }
+            viewportDirty = false;
+        }
     }
 }

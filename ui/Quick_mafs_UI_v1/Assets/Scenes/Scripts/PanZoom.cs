@@ -11,10 +11,14 @@ public class PanZoom : MonoBehaviour
     private Vector2 center = Vector2.zero;
     private float halfSize = 1.8f;
 
+    private Vector2 lastReportedCenter = Vector2.zero;
+    private float lastReportedHalfSize = 1.8f;
+    private const float viewportSendEpsilon = 0.0001f;
+
     // Panning variables
     private Vector2 deltaMouse = Vector2.zero;
     // deltaMouse returns the number of pixels the cursor has moved across, scale it down
-    private float panningSensitivity = 0.001f;
+    [SerializeField] private float panningSensitivity = 0.001f;
 
     // Zooming variables
     private float zoomFactor = 0.9f;
@@ -25,7 +29,24 @@ public class PanZoom : MonoBehaviour
     {
         center = ApplyPan(center, deltaMouse);
         deltaMouse = Vector2.zero;
-        Debug.Log($"Center:{center}, HalfSize: {halfSize}");
+
+        bool centerChanged = Vector2.Distance(center, lastReportedCenter) > viewportSendEpsilon;
+        bool sizeChanged = Mathf.Abs(halfSize - lastReportedHalfSize) > viewportSendEpsilon;
+
+        if (centerChanged || sizeChanged)
+        {
+            PynqParamController.NotifyViewportChanged();
+            lastReportedCenter = center;
+            lastReportedHalfSize = halfSize;
+        }
+    }
+
+    public void GetViewportBounds(out float xMin, out float xMax, out float yMin, out float yMax)
+    {
+        xMin = center.x - halfSize;
+        xMax = center.x + halfSize;
+        yMin = center.y - halfSize;
+        yMax = center.y + halfSize;
     }
 
 
@@ -36,13 +57,13 @@ public class PanZoom : MonoBehaviour
         // We ignore when scroll == 0, halfSize doesn't change
         if (scroll > 0)
         {
-            Debug.Log("New Input: Zooming in...");
+            //Debug.Log("New Input: Zooming in...");
             candidateHalfSize *= zoomFactor;
             candidateHalfSize = Mathf.Max(candidateHalfSize, minHalfSize);
         }
         else if (scroll < 0)
         {
-            Debug.Log("New Input: Zooming out...");
+            //Debug.Log("New Input: Zooming out...");
             candidateHalfSize /= zoomFactor;
             candidateHalfSize = Mathf.Min(candidateHalfSize, maxHalfSize);
         }
@@ -56,7 +77,7 @@ public class PanZoom : MonoBehaviour
 
     void OnPan(InputValue input)
     {
-        Debug.Log("Panning detected...");
+        //Debug.Log("Panning detected...");
         deltaMouse = input.Get<Vector2>();
 
         Vector2 candidateCenter = ApplyPan(center, deltaMouse);

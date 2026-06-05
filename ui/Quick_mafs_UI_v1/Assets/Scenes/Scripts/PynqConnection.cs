@@ -40,6 +40,7 @@ public class PynqConnection : MonoBehaviour
     //protocol constants
     private const byte MSG_PARAMS = 0x01;
     private const byte MSG_MAGNETS = 0x02;
+    private const byte MSG_VIEWPORT = 0x03;
     private const byte MSG_IMAGE = 0x10;
     private const byte MSG_INFO = 0x11;
     private const int IMAGE_HEADER = 9; //u16 w + u16 h + u8 depth + u32 version
@@ -167,6 +168,19 @@ public class PynqConnection : MonoBehaviour
         if (magnets == null) return;
         string json = JsonConvert.SerializeObject(new { magnets });
         SendJson(MSG_MAGNETS, json);
+    }
+
+    public void SendViewport(float xMin, float xMax, float yMin, float yMax)
+    {
+        Debug.Log("PynqConnection - sending viewport...");
+        string json = JsonConvert.SerializeObject(new
+        {
+            x_min = xMin,
+            x_max = xMax,
+            y_min = yMin,
+            y_max = yMax
+        });
+        SendJson(MSG_VIEWPORT, json);
     }
 
     private void SendJson(byte type, string json)
