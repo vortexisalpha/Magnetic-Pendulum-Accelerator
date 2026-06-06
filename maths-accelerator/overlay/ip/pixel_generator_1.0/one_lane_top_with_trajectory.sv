@@ -201,7 +201,7 @@ module one_lane_top #(
     assign traj_done  = traj_valid && pixel_done;   // target settled / reached time-out
 
     logic settled_w, timeout_w;
-    fsm_settle u_fsm (
+    detect_settle u_detect (
         .rst(rst), .valid(out_valid),
         .settle_count(out_settle_count), .step_cnt(out_step_cnt),
         .consec_settle_count(consec_settle_count), .max_steps(max_steps),
