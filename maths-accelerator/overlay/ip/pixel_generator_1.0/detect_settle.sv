@@ -1,4 +1,4 @@
-module fsm_settle (
+module detect_settle (
     input logic rst,
 
     // vals from last stage of lane
