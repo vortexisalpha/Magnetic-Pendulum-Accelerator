@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module tb_fsm_settle;
+module tb_detect_settle;
 
     logic        rst;
     logic        valid;
@@ -11,7 +11,7 @@ module tb_fsm_settle;
     logic        settled;
     logic        time_out;
 
-    fsm_settle dut (
+    detect_settle dut (
         .rst                 (rst),
         .valid               (valid),
         .settle_count        (settle_count),
@@ -62,10 +62,10 @@ module tb_fsm_settle;
 
     // tests
     initial begin
-        $dumpfile("tb_fsm_settle.vcd");
-        $dumpvars(0, tb_fsm_settle);
+        $dumpfile("tb_detect_settle.vcd");
+        $dumpvars(0, tb_detect_settle);
 
-        $display("=== fsm_settle testbench ===\n");
+        $display("=== detect_settle testbench ===\n");
 
         // 1. reset
         apply(1, 1, 3, 100,  1, 2000); check("rst=1 valid=1 count=3 → both 0",           0, 0);
