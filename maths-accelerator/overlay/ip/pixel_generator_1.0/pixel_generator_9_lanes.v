@@ -145,6 +145,7 @@ assign s_axi_lite_bresp   = (writeAddr < REG_FILE_SIZE) ? AXI_OK : AXI_ERR;
 //  [14] mu  [15] dt              [16] r_settle_sq  [17] v_settle
 //  [18] sum_r_settle_sq_h_sq     [19] {consec_settle_count[13:12], max_steps[11:0]}
 //  [20] debug: frame_done_latch
+//  [30] mag_active[2:0] : bit i = 1 -> magnet i active
 // -------------------------------------------------------------------------
 // trajectory inputs
 // [21] traj_px_id
@@ -158,6 +159,9 @@ assign s_axi_lite_bresp   = (writeAddr < REG_FILE_SIZE) ? AXI_OK : AXI_ERR;
 
 wire start_w = reg_file[0][0];
 wire bram_rd_mode = reg_file[0][1];
+
+//mag_active extract
+wire [2:0] mag_active = reg_file[30][2:0];
 
 // -------------------------------------------------------------------------
 // 8 lane instances
@@ -195,6 +199,7 @@ one_lane_top #( \
     .mag0_x(reg_file[5][17:0]), .mag0_y(reg_file[6][17:0]), \
     .mag1_x(reg_file[7][17:0]), .mag1_y(reg_file[8][17:0]), \
     .mag2_x(reg_file[9][17:0]), .mag2_y(reg_file[10][17:0]), \
+    .mag_active(mag_active), \
     .gamma(reg_file[11][17:0]), .omega2(reg_file[12][17:0]), \
     .h2(reg_file[13][17:0]),    .mu(reg_file[14][17:0]),    .dt(reg_file[15][17:0]), \
     .r_settle_sq(reg_file[16][17:0]), .v_settle(reg_file[17][17:0]), \

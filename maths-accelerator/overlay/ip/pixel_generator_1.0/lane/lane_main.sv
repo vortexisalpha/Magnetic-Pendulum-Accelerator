@@ -19,6 +19,11 @@ module lane_main #(
     input logic signed [W-1:0] mag1_x, mag1_y,
     input logic signed [W-1:0] mag2_x, mag2_y,
 
+    // active magnet mask:
+    // bit 2 | bit 1 | bit 0
+    // mag 2 | mag 1 | mag 0
+    input logic [2:0] mag_active,
+
     input logic signed [W-1:0] gamma, omega2, h2, mu, dt,
 
     //not signed as it's always positive
@@ -220,10 +225,13 @@ always_ff @(posedge clk) begin
     end
     
     else begin
-
-        s3a_q0 <= s3a_q0_w;
-        s3a_q1 <= s3a_q1_w;
-        s3a_q2 <= s3a_q2_w;
+        // magnet active mux:
+        // if a magnet is inactive, set its q value to the max possible value (all 1s)
+        // this is to make sure it can never be chosen as the nearest magnet in S3b,
+        // keeping it out of settle checks and nearest-magnet checks in s3
+        s3a_q0 <= mag_active[0] ? s3a_q0_w : {Q_WIDTH{1'b1}};
+        s3a_q1 <= mag_active[1] ? s3a_q1_w : {Q_WIDTH{1'b1}};
+        s3a_q2 <= mag_active[2] ? s3a_q2_w : {Q_WIDTH{1'b1}};
 
         //pass through values
         s3a_valid <= s2b_valid;
@@ -616,12 +624,14 @@ always @(posedge clk) begin
     end
     else begin
         s6a_valid <= s5b_valid;
-        s6a_dx_invq0 <= s5b_dx_invq0;
-        s6a_dy_invq0 <= s5b_dy_invq0;
-        s6a_dx_invq1 <= s5b_dx_invq1;
-        s6a_dy_invq1 <= s5b_dy_invq1;
-        s6a_dx_invq2 <= s5b_dx_invq2;
-        s6a_dy_invq2 <= s5b_dy_invq2;
+        // magnet active mux
+        // inactive magnet contributes no force
+        s6a_dx_invq0 <= mag_active[0] ? s5b_dx_invq0 : {W{1'b0}};
+        s6a_dy_invq0 <= mag_active[0] ? s5b_dy_invq0 : {W{1'b0}};
+        s6a_dx_invq1 <= mag_active[1] ? s5b_dx_invq1 : {W{1'b0}};
+        s6a_dy_invq1 <= mag_active[1] ? s5b_dy_invq1 : {W{1'b0}};
+        s6a_dx_invq2 <= mag_active[2] ? s5b_dx_invq2 : {W{1'b0}};
+        s6a_dy_invq2 <= mag_active[2] ? s5b_dy_invq2 : {W{1'b0}};
         s6a_x <= s5b_x;
         s6a_y <= s5b_y;
         s6a_vx <= s5b_vx;

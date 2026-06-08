@@ -20,6 +20,9 @@ module one_lane_top #(
     input logic signed [W-1:0] mag1_x, mag1_y,
     input logic signed [W-1:0] mag2_x, mag2_y,
 
+    // active-magnet mask: bit i high => magnet i is active (see lane_main)
+    input logic [2:0] mag_active,
+
     input logic signed [W-1:0] gamma, omega2, h2, mu, dt,
 
     input logic [W-1:0] r_settle_sq, v_settle,
@@ -175,6 +178,7 @@ module one_lane_top #(
         .mag0_x(mag0_x), .mag0_y(mag0_y),
         .mag1_x(mag1_x), .mag1_y(mag1_y),
         .mag2_x(mag2_x), .mag2_y(mag2_y),
+        .mag_active(mag_active),
         .gamma(gamma), .omega2(omega2), .h2(h2), .mu(mu), .dt(dt),
         .r_settle_sq(r_settle_sq), .v_settle(v_settle),
         .sum_r_settle_sq_h_sq(sum_r_settle_sq_h_sq),
