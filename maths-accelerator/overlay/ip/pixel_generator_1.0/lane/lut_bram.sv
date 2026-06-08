@@ -1,12 +1,12 @@
 module lut_bram #(
     parameter W = 18,
     parameter F = 14,
-    parameter LUT_SIZE = 4096, // 4096 entries
-    parameter LUT_ADDR_W = 12  // 2^12 = 4096
+    parameter LUT_SIZE = 8192, // 8192 entries
+    parameter LUT_ADDR_W = 13  // 2^13 = 8192
 )(
     input clk,
     input rst,
-    input logic [W+1:0] addr,
+    input logic [W-1:0] addr,
     output logic signed [W-1:0] data_out
 );
 
@@ -18,8 +18,10 @@ module lut_bram #(
     end
     logic [LUT_ADDR_W-1:0] idx;
 
-    //saturate address to LUT SIZE, if addr exceed LUT_SIZE, use last entry
-    assign idx = (|addr[W+1:W]) ? {LUT_ADDR_W{1'b1}} : addr[LUT_ADDR_W+5:6];
+    // q is Q5.13 over [0,32); 8192 entries cover the same range, so the index is
+    // the top 13 bits of the address (idx = q_raw >> (W-LUT_ADDR_W) = addr[17:5]).
+    // no saturation needed: max addr 0x3FFFF maps to the last entry (8191)
+    assign idx = addr[17:5];
 
     always @(posedge clk) begin
         //synchronous read

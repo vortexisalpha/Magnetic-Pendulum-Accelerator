@@ -1,8 +1,8 @@
 module lane_main #(
     parameter W = 18,
     parameter F = 14,
-    parameter LUT_SIZE = 4096, // 4096 entries
-    parameter LUT_ADDR_W = 12, // 2^12 = 4096
+    parameter LUT_SIZE = 8192, // 8192 entries
+    parameter LUT_ADDR_W = 13, // 2^13 = 8192
     parameter Q_WIDTH = 18, // 0 to 26.2225 and everything else must be fractional.
     //therefore for q width use Q 5.13 implementation. unsigned
     parameter IMG_W = 160,

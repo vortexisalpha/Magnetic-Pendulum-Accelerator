@@ -190,7 +190,7 @@ wire traj_done_0, traj_done_1, traj_done_2, traj_done_3, traj_done_4, traj_done_
 // ID = lane ID, FD = Frame Done, FRD = Frame-buffer Read Data
 `define LANE_CONNECT(ID, FD, FRD) \
 one_lane_top #( \
-    .W(18), .F(14), .LUT_SIZE(4096), .LUT_ADDR_W(12), .Q_WIDTH(18), \
+    .W(18), .F(14), .LUT_SIZE(8192), .LUT_ADDR_W(13), .Q_WIDTH(18), \
     .IMG_W(IMG_W), .IMG_H(IMG_H), .LANE_ID(ID), .NUM_LANES(9) \
 ) u_lane``ID ( \
     .clk(out_stream_aclk), .rst(!periph_resetn), .start(start_w), \

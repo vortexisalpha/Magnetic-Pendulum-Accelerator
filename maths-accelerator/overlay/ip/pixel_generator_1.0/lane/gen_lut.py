@@ -4,7 +4,7 @@ import math
 #NB: the script covers [0, 32)
 
 # LUT/system parameters:
-LUT_SIZE = 4096
+LUT_SIZE = 8192
 F = 14
 
 # MAX value for 18-bit unsigned fixed-point
@@ -13,7 +13,7 @@ SAT_MAX = 0x1FFFF
 #converts floating point to fixed-point by multiplying by SCALE
 SCALE = 1 << F
 
-#step per LUT index since we want to conver 0 to 32 with 4096 entries
+#step per LUT index since we want to cover 0 to 32 with LUT_SIZE (8192) entries
 Q_PER_INDEX = 32.0 / LUT_SIZE
 
 entries = []
