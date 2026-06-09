@@ -12,11 +12,13 @@ public class TrajectoryRenderer : MonoBehaviour
     [SerializeField] private RawImage displayImage;
     [Tooltip("Provides the viewport bounds the trajectory points are mapped through.")]
     [SerializeField] private PanZoom panZoom;
+    [Tooltip("Image toggle. When it is off the line is drawn white instead of lineColor.")]
+    [SerializeField] private Toggle imageToggle;
 
     [Header("Trajectory line")]
     [SerializeField] private int overlayResolution = 512;
     [SerializeField] private Color lineColor = new Color(0f, 1f, 1f, 1f);
-    [SerializeField] private int lineThickness = 4;
+    [SerializeField] private int lineThickness = 2;
 
     [Header("Close button")]
     [SerializeField] private Vector2 closeButtonSize = new Vector2(36f, 36f);
@@ -27,6 +29,9 @@ public class TrajectoryRenderer : MonoBehaviour
     private RawImage overlayImage;
     private RectTransform closeButton;
     private Texture2D overlayTexture;
+
+    private Vector2[] lastPoints;
+    private bool lastImageToggleOn;
 
     void Start()
     {
@@ -50,6 +55,16 @@ public class TrajectoryRenderer : MonoBehaviour
             PynqConnection.Instance.TrajectoryReceived -= OnTrajectoryReceived;
     }
 
+    void Update()
+    {
+        //repaint live if the image toggle flips while a trajectory is on screen
+        if (imageToggle != null && imageToggle.isOn != lastImageToggleOn &&
+            overlayImage != null && overlayImage.gameObject.activeSelf)
+        {
+            DrawTrajectory(lastPoints);
+        }
+    }
+
     private void OnTrajectoryReceived(TrajectoryMessage msg)
     {
         var conn = PynqConnection.Instance;
@@ -69,6 +84,8 @@ public class TrajectoryRenderer : MonoBehaviour
 
     private void DrawTrajectory(Vector2[] points)
     {
+        lastPoints = points;
+
         var view = new TrajectoryTexturePainter.Viewport
         {
             xMin = -1.8f, xMax = 1.8f, yMin = -1.8f, yMax = 1.8f
@@ -83,7 +100,11 @@ public class TrajectoryRenderer : MonoBehaviour
         else
             Debug.LogWarning("[Trajectory] received 0 points");
 
-        TrajectoryTexturePainter.Paint(overlayTexture, points, view, lineColor, lineThickness);
+        //white line when the image overlay is toggled off, otherwise lineColor
+        lastImageToggleOn = imageToggle == null || imageToggle.isOn;
+        Color drawColor = lastImageToggleOn ? lineColor : Color.white;
+
+        TrajectoryTexturePainter.Paint(overlayTexture, points, view, drawColor, lineThickness);
         AlignOverlay();
     }
 
