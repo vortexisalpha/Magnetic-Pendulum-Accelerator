@@ -10,8 +10,9 @@ public static class TrajectoryTexturePainter
         public float xMin, xMax, yMin, yMax;
     }
 
+    //the line colour is lerped from startColor (first point) to endColor (last)
     public static void Paint(Texture2D tex, Vector2[] points, Viewport view,
-                             Color32 lineColor, int thickness)
+                             Color32 startColor, Color32 endColor, int thickness)
     {
         int w = tex.width;
         int h = tex.height;
@@ -23,20 +24,32 @@ public static class TrajectoryTexturePainter
         {
             float spanX = Mathf.Max(view.xMax - view.xMin, 1e-6f);
             float spanY = Mathf.Max(view.yMax - view.yMin, 1e-6f);
+            int last = points.Length - 1;
 
             Vector2Int prev = ToPixel(points[0], view, spanX, spanY, w, h);
-            DrawDisc(pixels, w, h, prev.x, prev.y, thickness, lineColor);
+            DrawDisc(pixels, w, h, prev.x, prev.y, thickness, startColor);
 
             for (int i = 1; i < points.Length; i++)
             {
+                float t = last > 0 ? (float)i / last : 0f;
+                Color32 color = LerpColor(startColor, endColor, t);
                 Vector2Int cur = ToPixel(points[i], view, spanX, spanY, w, h);
-                DrawLine(pixels, w, h, prev.x, prev.y, cur.x, cur.y, thickness, lineColor);
+                DrawLine(pixels, w, h, prev.x, prev.y, cur.x, cur.y, thickness, color);
                 prev = cur;
             }
         }
 
         tex.SetPixels32(pixels);
         tex.Apply();
+    }
+
+    private static Color32 LerpColor(Color32 a, Color32 b, float t)
+    {
+        return new Color32(
+            (byte)Mathf.Lerp(a.r, b.r, t),
+            (byte)Mathf.Lerp(a.g, b.g, t),
+            (byte)Mathf.Lerp(a.b, b.b, t),
+            (byte)Mathf.Lerp(a.a, b.a, t));
     }
 
     private static Vector2Int ToPixel(Vector2 p, Viewport v, float spanX, float spanY, int w, int h)

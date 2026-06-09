@@ -17,7 +17,10 @@ public class TrajectoryRenderer : MonoBehaviour
 
     [Header("Trajectory line")]
     [SerializeField] private int overlayResolution = 512;
-    [SerializeField] private Color lineColor = new Color(0f, 1f, 1f, 1f);
+    [Tooltip("Colour at the trajectory start position.")]
+    [SerializeField] private Color startColor = new Color(0f, 1f, 1f, 1f);
+    [Tooltip("Colour at the trajectory end position.")]
+    [SerializeField] private Color endColor = new Color(1f, 0f, 1f, 1f);
     [SerializeField] private int lineThickness = 2;
 
     [Header("Close button")]
@@ -100,11 +103,12 @@ public class TrajectoryRenderer : MonoBehaviour
         else
             Debug.LogWarning("[Trajectory] received 0 points");
 
-        //white line when the image overlay is toggled off, otherwise lineColor
+        //start->end gradient; collapses to a white line when the image toggle is off
         lastImageToggleOn = imageToggle == null || imageToggle.isOn;
-        Color drawColor = lastImageToggleOn ? lineColor : Color.white;
+        Color start = lastImageToggleOn ? startColor : Color.white;
+        Color end = lastImageToggleOn ? endColor : Color.white;
 
-        TrajectoryTexturePainter.Paint(overlayTexture, points, view, drawColor, lineThickness);
+        TrajectoryTexturePainter.Paint(overlayTexture, points, view, start, end, lineThickness);
         AlignOverlay();
     }
 
