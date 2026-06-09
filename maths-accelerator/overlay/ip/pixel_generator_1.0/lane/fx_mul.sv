@@ -25,6 +25,7 @@ module fx_mul #(
     localparam signed [W-1:0] SAT_MIN = {1'b1, {(W-1){1'b0}}};
 
     //S1: multiply and put raw product into reg
+    //product is 2*W bits to hold full precison before shifting/saturation
     logic signed [2*W-1:0] product_r;
     always_ff @(posedge clk) begin
         if (rst) product_r <= '0;
