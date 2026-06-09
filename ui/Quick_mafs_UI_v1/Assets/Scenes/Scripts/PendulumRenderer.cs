@@ -119,6 +119,9 @@ public class PendulumRenderer : MonoBehaviour
         int depthMax = DepthMax(msg.bitDepth);
         float depthScale = DepthToWorldScale(msg.bitDepth, heightScale);
 
+        //in fss mode the low bits encode sensitive/timeout instead of magnet id
+        bool fss = PynqConnection.Instance != null && PynqConnection.Instance.FssMode;
+
         for (int y = 0; y < height; y++){
             for (int x = 0; x < width; x++){
                 int pixel = msg.pixels[y * width + x];
@@ -127,7 +130,8 @@ public class PendulumRenderer : MonoBehaviour
 
                 int bufPos = (height - y - 1) * width + x; //array buffer is inverted in unity, flip y
 
-                catPixels[bufPos] = palette[category];
+                Color32 catColor = fss ? FssColorizer.Colorize(pixel) : palette[category];
+                catPixels[bufPos] = catColor;
 
                 byte intensity = (byte)((depth * 255) / depthMax);
                 valPixels[bufPos] = PlasmaColor(intensity);
@@ -135,7 +139,7 @@ public class PendulumRenderer : MonoBehaviour
                 //3d:
                 int meshIdx = y * width + x;
                 verts3D[meshIdx] = new Vector3(x * xyScale, depth * depthScale, y * xyScale);
-                vertColors3D[meshIdx] = palette[category];
+                vertColors3D[meshIdx] = catColor;
             }
         }
 

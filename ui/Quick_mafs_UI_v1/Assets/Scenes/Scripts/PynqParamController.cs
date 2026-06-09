@@ -83,6 +83,14 @@ public class PynqParamController : MonoBehaviour
         instance.nextSendAllowedTime = 0f; // forcing an immediate send on slider release
     }
 
+    //fss mode toggled: resend params now so the board re-renders in the new mode
+    public static void NotifyFssChanged()
+    {
+        if (instance == null) return;
+        instance.slidersDirty = true;
+        instance.nextSendAllowedTime = 0f;
+    }
+
     private void SnapshotSliders()
     {
         data.dampingFactor = dampingSlider.displayValue;

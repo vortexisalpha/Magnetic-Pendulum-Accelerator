@@ -66,6 +66,12 @@ public class PynqConnection : MonoBehaviour
     //don't drop the earlier (still valid) trajectories. accessed on main thread only.
     private readonly HashSet<uint> pendingTrajectoryRequests = new HashSet<uint>();
 
+    //when true the board renders the final-state-sensitivity map instead of the
+    //basin; carried as an extra field on the existing PARAMS frame (no new event)
+    public bool FssMode { get; private set; }
+
+    public void SetFssMode(bool on) => FssMode = on;
+
     public int LatestSentParamVersion { get; private set; }
 
     public int MinAcceptedImageVersion { get; private set; }
@@ -83,11 +89,13 @@ public class PynqConnection : MonoBehaviour
     private readonly ConcurrentQueue<byte[]> outbound = new ConcurrentQueue<byte[]>();
     private byte[] pendingParamsFrame;
     private float pendingDampingFactor, pendingMagneticStrength, pendingPendulumLength, pendingPendulumHeight;
+    private bool pendingFss;
     private int pendingParamVersion;
     private int pendingMinAcceptedImageVersion;
     private readonly object outboundLock = new object();
 
     private float lastSentDampingFactor, lastSentMagneticStrength, lastSentPendulumLength, lastSentPendulumHeight;
+    private bool lastSentFss;
     private bool hasSentParams;
 
     void Awake()
@@ -136,11 +144,14 @@ public class PynqConnection : MonoBehaviour
 
     public void SendParams(float dampingFactor, float magneticStrength, float pendulumLength, float pendulumHeight)
     {
+        bool fss = FssMode;
+
         if (hasSentParams &&
             dampingFactor == lastSentDampingFactor &&
             magneticStrength == lastSentMagneticStrength &&
             pendulumLength == lastSentPendulumLength &&
-            pendulumHeight == lastSentPendulumHeight)
+            pendulumHeight == lastSentPendulumHeight &&
+            fss == lastSentFss)
             return;
 
         lock (outboundLock)
@@ -149,7 +160,8 @@ public class PynqConnection : MonoBehaviour
                 dampingFactor == pendingDampingFactor &&
                 magneticStrength == pendingMagneticStrength &&
                 pendulumLength == pendingPendulumLength &&
-                pendulumHeight == pendingPendulumHeight)
+                pendulumHeight == pendingPendulumHeight &&
+                fss == pendingFss)
                 return;
         }
 
@@ -162,7 +174,8 @@ public class PynqConnection : MonoBehaviour
             dampingFactor,
             magneticStrength,
             pendulumLength,
-            pendulumHeight
+            pendulumHeight,
+            fss
         });
         byte[] frame = BuildFrame(MSG_PARAMS, Encoding.UTF8.GetBytes(json));
 
@@ -173,6 +186,7 @@ public class PynqConnection : MonoBehaviour
             pendingMagneticStrength = magneticStrength;
             pendingPendulumLength = pendulumLength;
             pendingPendulumHeight = pendulumHeight;
+            pendingFss = fss;
             pendingParamVersion = paramVersion;
             pendingMinAcceptedImageVersion = minImageVersion;
         }
@@ -240,6 +254,7 @@ public class PynqConnection : MonoBehaviour
                         lastSentMagneticStrength = pendingMagneticStrength;
                         lastSentPendulumLength = pendingPendulumLength;
                         lastSentPendulumHeight = pendingPendulumHeight;
+                        lastSentFss = pendingFss;
                         hasSentParams = true;
                         LatestSentParamVersion = pendingParamVersion;
                         MinAcceptedImageVersion = pendingMinAcceptedImageVersion;
