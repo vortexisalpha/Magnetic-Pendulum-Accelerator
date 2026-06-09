@@ -1,4 +1,4 @@
-// Overall 9 lanes
+﻿// Overall 9 lanes
 // implementation of one lane,
 // each lane corresponds to one horizontal slice of the overall pixel grid
 
@@ -11,7 +11,7 @@ module one_lane_top #(
     parameter IMG_W = 360,
     parameter IMG_H = 360,
     parameter LANE_ID   = 0,  // 0..NUM_LANES-1
-    parameter NUM_LANES = 9
+    parameter NUM_LANES = 12
 )(
     input logic clk,
     input logic rst,
@@ -77,7 +77,7 @@ module one_lane_top #(
     logic [$clog2(IMG_W * IMG_H)-1:0] new_px_id;
 
     logic coord_mapper_valid_out;
-    logic coord_mapper_busy;   // high while a coord occupies the 2-stage mapper pipeline
+    logic coord_mapper_busy; // high while a coord occupies the 2-stage mapper pipeline
     always_ff @(posedge clk) begin
         if (rst || !start) begin
             scan_p      <= '0;
