@@ -15,8 +15,8 @@ public class TrajectoryRenderer : MonoBehaviour
 
     [Header("Trajectory line")]
     [SerializeField] private int overlayResolution = 512;
-    [SerializeField] private Color lineColor = new Color(1f, 1f, 1f, 1f);
-    [SerializeField] private int lineThickness = 3;
+    [SerializeField] private Color lineColor = new Color(0f, 1f, 1f, 1f);
+    [SerializeField] private int lineThickness = 4;
 
     [Header("Close button")]
     [SerializeField] private Vector2 closeButtonSize = new Vector2(36f, 36f);
@@ -54,12 +54,12 @@ public class TrajectoryRenderer : MonoBehaviour
     {
         var conn = PynqConnection.Instance;
 
-        //verify we are visualising the pixel the user asked for
+        //verify we actually asked for this pixel (matches against all outstanding
+        //requests, so rapid clicks don't drop earlier valid trajectories)
         if (conn != null && conn.HasRequestedTrajectory &&
-            msg.pixelId != conn.LastRequestedTrajectoryPixelId)
+            !conn.TryConsumeTrajectoryRequest(msg.pixelId))
         {
-            Debug.LogWarning($"[Trajectory] pixel id mismatch: got {msg.pixelId}, " +
-                             $"expected {conn.LastRequestedTrajectoryPixelId}; ignoring.");
+            Debug.LogWarning($"[Trajectory] unrequested pixel id {msg.pixelId}; ignoring.");
             return;
         }
 
@@ -75,6 +75,13 @@ public class TrajectoryRenderer : MonoBehaviour
         };
         if (panZoom != null)
             panZoom.GetViewportBounds(out view.xMin, out view.xMax, out view.yMin, out view.yMax);
+
+        int n = points != null ? points.Length : 0;
+        if (n > 0)
+            Debug.Log($"[Trajectory] {n} pts, first={points[0]}, last={points[n - 1]}, " +
+                      $"view x[{view.xMin:F2},{view.xMax:F2}] y[{view.yMin:F2},{view.yMax:F2}]");
+        else
+            Debug.LogWarning("[Trajectory] received 0 points");
 
         TrajectoryTexturePainter.Paint(overlayTexture, points, view, lineColor, lineThickness);
         AlignOverlay();

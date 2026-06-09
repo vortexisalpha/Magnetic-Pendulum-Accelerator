@@ -62,6 +62,10 @@ public class PynqConnection : MonoBehaviour
     public uint LastRequestedTrajectoryPixelId { get; private set; }
     public bool HasRequestedTrajectory { get; private set; }
 
+    //ids we are still waiting on; replies are matched against this so rapid clicks
+    //don't drop the earlier (still valid) trajectories. accessed on main thread only.
+    private readonly HashSet<uint> pendingTrajectoryRequests = new HashSet<uint>();
+
     public int LatestSentParamVersion { get; private set; }
 
     public int MinAcceptedImageVersion { get; private set; }
@@ -201,8 +205,16 @@ public class PynqConnection : MonoBehaviour
     {
         LastRequestedTrajectoryPixelId = pixelId;
         HasRequestedTrajectory = true;
+        pendingTrajectoryRequests.Add(pixelId);
         string json = JsonConvert.SerializeObject(new { pixel_id = pixelId });
         SendJson(MSG_TRAJ_REQ, json);
+    }
+
+    //true if pixelId was actually requested; clears it from the pending set so we
+    //only render trajectories the user asked for (guards against wrong-pixel data)
+    public bool TryConsumeTrajectoryRequest(uint pixelId)
+    {
+        return pendingTrajectoryRequests.Remove(pixelId);
     }
 
     private void SendJson(byte type, string json)
