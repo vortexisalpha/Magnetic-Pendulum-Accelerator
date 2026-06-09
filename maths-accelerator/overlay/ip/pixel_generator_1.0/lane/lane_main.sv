@@ -832,8 +832,9 @@ logic [1:0] s7a_settle_count;
 logic signed [W-1:0] s7_dt_ax_w, s7_dt_ay_w;
 
 
-fx_mul #(.W(W), .F(F)) m_dt_ax (.clk(clk),.rst(rst),.a(dt),.b(s6e_ax),.c(s7_dt_ax_w));
-fx_mul #(.W(W), .F(F)) m_dt_ay (.clk(clk),.rst(rst),.a(dt),.b(s6e_ay),.c(s7_dt_ay_w));
+//replaced fx_mul with divide by 100 modules
+fx_divide_by_100 #(.W(W), .F(F)) m_dt_ax (.clk(clk),.rst(rst),.a(s6e_ax),.c(s7_dt_ax_w));
+fx_divide_by_100 #(.W(W), .F(F)) m_dt_ay (.clk(clk),.rst(rst),.a(s6e_ay),.c(s7_dt_ay_w));
 
 
 always @(posedge clk) begin
@@ -944,8 +945,9 @@ logic [1:0] s8a_settle_count;
 
 logic signed [W-1:0] s8_dt_x_w, s8_dt_y_w;
 
-fx_mul #(.W(W), .F(F)) m_dt_x (.clk(clk),.rst(rst),.a(dt),.b(s7c_vx),.c(s8_dt_x_w));
-fx_mul #(.W(W), .F(F)) m_dt_y (.clk(clk),.rst(rst),.a(dt),.b(s7c_vy),.c(s8_dt_y_w));
+//replaced fx_mul with divide by 100 modules as dt is always 0.01
+fx_divide_by_100 #(.W(W), .F(F)) m_dt_x (.clk(clk),.rst(rst),.a(s7c_vx),.c(s8_dt_x_w));
+fx_divide_by_100 #(.W(W), .F(F)) m_dt_y (.clk(clk),.rst(rst),.a(s7c_vy),.c(s8_dt_y_w));
 
 
 always @(posedge clk) begin

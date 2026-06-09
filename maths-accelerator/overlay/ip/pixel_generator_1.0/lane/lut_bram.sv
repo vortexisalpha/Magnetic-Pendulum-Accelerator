@@ -18,9 +18,7 @@ module lut_bram #(
     end
     logic [LUT_ADDR_W-1:0] idx;
 
-    // q is Q5.13 over [0,32); 8192 entries cover the same range, so the index is
-    // the top 13 bits of the address (idx = q_raw >> (W-LUT_ADDR_W) = addr[17:5]).
-    // no saturation needed: max addr 0x3FFFF maps to the last entry (8191)
+    // no saturation needed
     assign idx = addr[17:5];
 
     always @(posedge clk) begin
