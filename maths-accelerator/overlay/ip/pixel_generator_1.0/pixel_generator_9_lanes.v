@@ -30,27 +30,29 @@ module pixel_generator(
     input           s_axi_lite_wvalid // write data valid
 );
 
-parameter  IMG_W               = 270;
-parameter IMG_H                = 270;
-parameter  REG_FILE_SIZE       = 32;
+parameter  MAX_IMG_W               = 360;
+parameter MAX_IMG_H                = 360;
+parameter  REG_FILE_SIZE       = 64; // increased from 32 to hold more params
 localparam REG_FILE_AWIDTH     = $clog2(REG_FILE_SIZE);
 parameter  AXI_LITE_ADDR_WIDTH = 8;
 
-// derived resolution params (auto-scale with IMG_W/IMG_H)
-parameter  NUM_LANES  = 9;
-localparam TOTAL_PIX  = IMG_W * IMG_H;
-localparam SLICE_PIX  = (IMG_H / NUM_LANES) * IMG_W;
-localparam PXID_W     = $clog2(TOTAL_PIX);
-localparam LOCAL_W    = $clog2(SLICE_PIX);
-localparam LANE_W     = $clog2(NUM_LANES);
-localparam TRAJ_DEPTH = 4096;
+// derived resolution params (auto-scale with MAX_IMG_W/MAX_IMG_H)
+ parameter  NUM_LANES   = 9;
+  localparam TOTAL_PIX   = MAX_IMG_W * MAX_IMG_H;
+  localparam SLICE_PIX_MAX = (MAX_IMG_H / NUM_LANES) * MAX_IMG_W;
+  localparam PXID_W      = $clog2(TOTAL_PIX);
+  localparam LOCAL_W     = $clog2(SLICE_PIX_MAX);
+  localparam LANE_W      = $clog2(NUM_LANES);
+  localparam TRAJ_DEPTH  = 4096;
+  // width of the runtime resolution registers (holds a dimension value)
+  localparam DIM_W = $clog2((MAX_IMG_W > MAX_IMG_H) ? MAX_IMG_W : MAX_IMG_H) + 1;
 
 // elaboration-time checks for resolution sweep safety
 initial begin
-    if (IMG_H % NUM_LANES != 0)
-        $error("IMG_H (%0d) must be divisible by NUM_LANES (%0d)", IMG_H, NUM_LANES);
-    if ((IMG_W * IMG_H) % 4 != 0)
-        $error("IMG_W*IMG_H must be divisible by 4 (readout packs 4 px/word)");
+    if (MAX_IMG_H % NUM_LANES != 0)
+        $error("MAX_IMG_H (%0d) must be divisible by NUM_LANES (%0d)", MAX_IMG_H, NUM_LANES);
+    if ((MAX_IMG_W * MAX_IMG_H) % 4 != 0)
+        $error("MAX_IMG_W*MAX_IMG_H must be divisible by 4 (readout packs 4 px/word)");
 end
 
 localparam AWAIT_WADD_AND_DATA = 3'b000;
@@ -157,6 +159,12 @@ assign s_axi_lite_bresp   = (writeAddr < REG_FILE_SIZE) ? AXI_OK : AXI_ERR;
 // [26]     traj_done
 // [27]     traj_wr_addr for debug
 
+// resolution inputs
+// [31] img_w
+// [32] img_h
+// [33] slice_h (software computes img_h / NUM_LANES to save DSP)
+// [34] slice_pixels (img_w * slice_h)
+
 wire start_w = reg_file[0][0];
 wire bram_rd_mode = reg_file[0][1];
 
@@ -184,6 +192,14 @@ wire signed [17:0] traj_x_0, traj_x_1, traj_x_2, traj_x_3, traj_x_4, traj_x_5, t
 wire signed [17:0] traj_y_0, traj_y_1, traj_y_2, traj_y_3, traj_y_4, traj_y_5, traj_y_6, traj_y_7, traj_y_8;
 wire traj_done_0, traj_done_1, traj_done_2, traj_done_3, traj_done_4, traj_done_5, traj_done_6, traj_done_7, traj_done_8;
 
+// resolution inputs
+wire [DIM_W-1:0]  img_w_w     = reg_file[31][DIM_W-1:0];
+wire [DIM_W-1:0]  img_h_w     = reg_file[32][DIM_W-1:0];
+wire [DIM_W-1:0]  slice_h_w   = reg_file[33][DIM_W-1:0];
+wire [LOCAL_W:0]  slice_pix_w = reg_file[34][LOCAL_W:0];
+
+wire [PXID_W-1:0] total_pix_w = NUM_LANES * slice_pix_w;
+
 
 // Shared connection macro (all lanes get identical physics registers)
 // similar to #define in C
@@ -191,9 +207,10 @@ wire traj_done_0, traj_done_1, traj_done_2, traj_done_3, traj_done_4, traj_done_
 `define LANE_CONNECT(ID, FD, FRD) \
 one_lane_top #( \
     .W(18), .F(14), .LUT_SIZE(8192), .LUT_ADDR_W(13), .Q_WIDTH(18), \
-    .IMG_W(IMG_W), .IMG_H(IMG_H), .LANE_ID(ID), .NUM_LANES(9) \
+    .IMG_W(MAX_IMG_W), .IMG_H(MAX_IMG_H), .LANE_ID(ID), .NUM_LANES(9) \
 ) u_lane``ID ( \
     .clk(out_stream_aclk), .rst(!periph_resetn), .start(start_w), \
+    .img_w(img_w_w), .img_h(img_h_w), .slice_h(slice_h_w), .slice_pixels(slice_pix_w), \
     .x_min(reg_file[1][17:0]),  .y_min(reg_file[2][17:0]), \
     .x_step(reg_file[3][17:0]), .y_step(reg_file[4][17:0]), \
     .mag0_x(reg_file[5][17:0]), .mag0_y(reg_file[6][17:0]), \
@@ -331,9 +348,9 @@ always @(*) begin
     cur_lane  = {LANE_W{1'b0}};
     lane_base = {PXID_W{1'b0}};
     for (li = 0; li < NUM_LANES; li = li + 1)
-        if (fb_rd_addr_r >= li * SLICE_PIX) begin
+        if (fb_rd_addr_r >= li * slice_pix_w) begin
             cur_lane  = li[LANE_W-1:0];
-            lane_base = li * SLICE_PIX;
+            lane_base = li * slice_pix_w;
         end
 end
 
@@ -366,7 +383,6 @@ end
 // -------------------------------------------------------------------------
 // Once all eight lanes have finished, walk the whole 19,200-pixel frame in order, 
 // pack four pixels into each 32-bit word, and push those words out over AXI-Stream to the DMA
-localparam TOTAL_PIXELS = IMG_W * IMG_H;
 
 localparam PS_IDLE    = 3'd0;
 localparam PS_ISSUE   = 3'd1;
@@ -424,7 +440,7 @@ always @(posedge out_stream_aclk) begin
             if (bpos == 2'd3) begin
                 out_word_r <= {{2'b0, fb_rd_data}, wbuf};
                 out_vld_r  <= 1'b1;
-                out_lst_r  <= (px_done == TOTAL_PIXELS - 1); // signals if whoe frame is processed
+                out_lst_r  <= (px_done == total_pix_w - 1); // signals if whoe frame is processed
                 bpos       <= 0; // start on 0 byte index for new word
                 ps         <= PS_SEND; // send the frame
             end else begin

@@ -8,8 +8,8 @@ module one_lane_top #(
     parameter LUT_SIZE = 8192,
     parameter LUT_ADDR_W = 13,
     parameter Q_WIDTH = 18,
-    parameter IMG_W = 160,
-    parameter IMG_H = 120,
+    parameter IMG_W = 360,
+    parameter IMG_H = 360,
     parameter LANE_ID   = 0,  // 0..NUM_LANES-1
     parameter NUM_LANES = 9
 )(
@@ -19,6 +19,11 @@ module one_lane_top #(
     input logic signed [W-1:0] mag0_x, mag0_y,
     input logic signed [W-1:0] mag1_x, mag1_y,
     input logic signed [W-1:0] mag2_x, mag2_y,
+
+    // resolution inputs
+    input logic [$clog2(IMG_W):0] img_w,
+    input logic [$clog2(IMG_H):0] img_h, slice_h,
+    input logic [$clog2((IMG_H/NUM_LANES)*IMG_W):0]  slice_pixels,
 
     // active-magnet mask: bit i high => magnet i is active (see lane_main)
     input logic [2:0] mag_active,
@@ -34,7 +39,7 @@ module one_lane_top #(
     input logic [1:0]  consec_settle_count,
     input logic [11:0] max_steps,
 
-    // BRAM read port - local address within this lane's frame buffer (0..SLICE_PIXELS-1)
+    // BRAM read port - local address within this lane's frame buffer (0..slice_pixels-1)
     input  logic [$clog2((IMG_H/NUM_LANES)*IMG_W)-1:0] fb_rd_addr,
     output logic [5:0]  fb_rd_data,
 
@@ -51,11 +56,14 @@ module one_lane_top #(
 );
 
     // Strip-partitioning localparams
-    localparam SLICE_H        = IMG_H / NUM_LANES;
-    localparam Q_OFFSET       = IMG_H - 1 - LANE_ID * SLICE_H;
-    localparam PIXEL_ID_BASE  = LANE_ID * SLICE_H * IMG_W;
-    localparam SLICE_PIXELS   = SLICE_H * IMG_W;
-    localparam LOCAL_W        = $clog2(SLICE_PIXELS);
+    localparam SLICE_H_MAX    = IMG_H / NUM_LANES;
+    localparam SLICE_PIX_MAX  = SLICE_H_MAX * IMG_W;
+    localparam LOCAL_W = $clog2(SLICE_PIX_MAX);
+
+    logic [$clog2(IMG_H)-1:0] q_offset;
+    logic [$clog2(IMG_W*IMG_H)-1:0]  pixel_id_base;
+    assign q_offset = img_h - 1 - LANE_ID * slice_h;
+    assign pixel_id_base = LANE_ID * slice_pixels;
 
     // scanner
     logic [$clog2(IMG_W)-1:0] scan_p;
@@ -73,16 +81,16 @@ module one_lane_top #(
         if (rst || !start) begin
             scan_p      <= '0;
             scan_q      <= '0;
-            scan_id     <= PIXEL_ID_BASE; // scan_id initializes at the base value for the horizontal slice, rather than 0
+            scan_id     <= pixel_id_base; // scan_id initializes at the base value for the horizontal slice, rather than 0
             scan_active <= 1'b0;
         end
         else if (!scan_active && done_count == 0) begin
             scan_active <= 1'b1;
         end
         else if (scan_active && !new_px_pending && !coord_mapper_valid_out) begin
-            if (scan_p == IMG_W-1) begin
+            if (scan_p == img_w-1) begin
                 scan_p <= '0;
-                if (scan_q == SLICE_H-1) begin // row now ends with the border of the slice
+                if (scan_q == slice_h-1) begin // row now ends with the border of the slice
                     scan_active <= 1'b0;
                 end else begin
                     scan_q <= scan_q + 1;
@@ -107,7 +115,7 @@ module one_lane_top #(
         .x_min(x_min), .y_min(y_min),
         .x_step(x_step), .y_step(y_step),
         .p(scan_p),
-        .q(($clog2(IMG_H))'(Q_OFFSET) - scan_q),
+        .q(q_offset - scan_q),
         .valid_out(coord_mapper_valid_out),
         .x0(x0), .y0(y0),
         .init_step_cnt(init_step_cnt),
@@ -235,13 +243,13 @@ module one_lane_top #(
     logic [5:0]  fb_wr_data;
 
     assign fb_wr_en     = out_valid && pixel_done;
-    assign fb_wr_offset = out_id - ($clog2(IMG_W * IMG_H))'(PIXEL_ID_BASE);
+    assign fb_wr_offset = out_id - pixel_id_base;
     assign fb_wr_addr   = fb_wr_offset[LOCAL_W-1:0];
     assign fb_wr_data   = {step_category, out_magnet_id};
 
     frame_buffer #(
         .FB_W  (IMG_W),
-        .FB_H  (SLICE_H), // buffer for each slice
+        .FB_H  (SLICE_H_MAX), // buffer for each slice
         .DATA_W(6)
     ) u_frame_buffer (
         .clk(clk), .rst(rst),
@@ -249,11 +257,11 @@ module one_lane_top #(
         .rd_addr(fb_rd_addr), .rd_data(fb_rd_data)
     );
 
-    logic [LOCAL_W:0] done_count;  // one bit wider so it counts up to SLICE_PIXELS
+    logic [LOCAL_W:0] done_count;  // one bit wider so it counts up to slice_pixels
     always_ff @(posedge clk) begin
         if (rst || !start) done_count <= '0;
         else if (fb_wr_en) done_count <= done_count + 1;
     end
-    assign frame_done = (done_count >= (LOCAL_W+1)'(SLICE_PIXELS));
+    assign frame_done = (done_count >= slice_pixels);
 
 endmodule
