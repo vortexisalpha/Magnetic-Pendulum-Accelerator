@@ -77,6 +77,7 @@ module one_lane_top #(
     logic [$clog2(IMG_W * IMG_H)-1:0] new_px_id;
 
     logic coord_mapper_valid_out;
+    logic coord_mapper_busy;   // high while a coord occupies the 2-stage mapper pipeline
     always_ff @(posedge clk) begin
         if (rst || !start) begin
             scan_p      <= '0;
@@ -87,7 +88,7 @@ module one_lane_top #(
         else if (!scan_active && done_count == 0) begin
             scan_active <= 1'b1;
         end
-        else if (scan_active && !new_px_pending && !coord_mapper_valid_out) begin
+        else if (scan_active && !new_px_pending && !coord_mapper_busy) begin
             if (scan_p == img_w-1) begin
                 scan_p <= '0;
                 if (scan_q == slice_h-1) begin // row now ends with the border of the slice
@@ -103,7 +104,7 @@ module one_lane_top #(
     end
 
     logic coord_valid_in;
-    assign coord_valid_in = scan_active && !new_px_pending && !coord_mapper_valid_out;
+    assign coord_valid_in = scan_active && !new_px_pending && !coord_mapper_busy;
 
     logic [$clog2(IMG_W * IMG_H)-1:0] coord_id;
     logic signed [W-1:0] x0, y0;
@@ -117,6 +118,7 @@ module one_lane_top #(
         .p(scan_p),
         .q(q_offset - scan_q),
         .valid_out(coord_mapper_valid_out),
+        .busy(coord_mapper_busy),
         .x0(x0), .y0(y0),
         .init_step_cnt(init_step_cnt),
         .init_settle_cnt(init_settle_cnt),

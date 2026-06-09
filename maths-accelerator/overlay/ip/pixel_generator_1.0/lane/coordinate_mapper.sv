@@ -22,33 +22,45 @@ module coordinate_mapper #(
     input  logic [Q_W-1:0]  q,
     input  logic [PIXEL_ID_W-1:0]  pixel_id,
 
-
     output logic  valid_out,
+    output logic  busy,            // high while a coordinate occupies the pipeline
     output logic signed [W-1:0]  x0,
     output logic signed [W-1:0]  y0,
     output logic init_step_cnt,
     output logic init_settle_cnt,
     output logic [PIXEL_ID_W-1:0]  pixel_id_out
 );
+    logic signed [W-1:0] p_offset_c;
+    logic signed [W-1:0] q_offset_c;
 
-    // p and q are unsigned pixel indices.
-    // x_step and y_step are signed fixed-point values.
-    localparam int P_MUL_W = P_W + W + 1;
-    localparam int Q_MUL_W = Q_W + W + 1;
-
-    logic signed [P_MUL_W-1:0] p_offset_full;
-    logic signed [Q_MUL_W-1:0] q_offset_full;
-    
-    logic signed [W-1:0] p_offset_q;
-    logic signed [W-1:0] q_offset_q;
-
+    integer i;
     always_comb begin
-        p_offset_full = $signed({1'b0, p}) * x_step;
-        q_offset_full = $signed({1'b0, q}) * y_step;
+        p_offset_c = '0;
+        for (i = 0; i < P_W; i = i + 1)
+            if (p[i]) p_offset_c = p_offset_c + (x_step <<< i);
 
-        // Keep lower W bits, assuming the result fits in the chosen Q format.
-        p_offset_q = p_offset_full[W-1:0];
-        q_offset_q = q_offset_full[W-1:0];
+        q_offset_c = '0;
+        for (i = 0; i < Q_W; i = i + 1)
+            if (q[i]) q_offset_c = q_offset_c + (y_step <<< i);
+    end
+    
+    logic                   s1_valid;
+    logic signed [W-1:0]    s1_p_offset, s1_q_offset;
+    logic signed [W-1:0]    s1_x_min, s1_y_min;
+    logic [PIXEL_ID_W-1:0]  s1_pixel_id;
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            s1_valid <= 1'b0;
+        end
+        else begin
+            s1_valid    <= valid_in;
+            s1_p_offset <= p_offset_c;
+            s1_q_offset <= q_offset_c;
+            s1_x_min    <= x_min;       // sample origin alongside the offset
+            s1_y_min    <= y_min;
+            s1_pixel_id <= pixel_id;
+        end
     end
 
     always_ff @(posedge clk) begin
@@ -56,18 +68,23 @@ module coordinate_mapper #(
             valid_out <= 1'b0;
             x0 <= '0;
             y0 <= '0;
-        end 
+        end
         else begin
-            valid_out <= valid_in;
+            valid_out <= s1_valid;
 
-            if (valid_in) begin
-                x0 <= x_min + p_offset_q;
-                y0 <= y_min + q_offset_q;
-                init_step_cnt <= 1'b0;
+            if (s1_valid) begin
+                x0 <= s1_x_min + s1_p_offset;
+                y0 <= s1_y_min + s1_q_offset;
+                init_step_cnt   <= 1'b0;
                 init_settle_cnt <= 1'b0;
-                pixel_id_out <= pixel_id;
+                pixel_id_out    <= s1_pixel_id;
             end
         end
     end
+
+    // A coordinate is in flight if it occupies either pipeline stage. The scanner
+    // must wait for this to clear before issuing the next pixel (the old design
+    // gated on valid_out only, which is no longer sufficient with 2-cycle latency).
+    assign busy = s1_valid | valid_out;
 
 endmodule
