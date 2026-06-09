@@ -9,11 +9,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-#include <cctype>
-#include <cerrno>
-#include <cstdio>
-#include <cstdlib>
-#include <sys/stat.h>
+#include <filesystem> 
 
 // FixedFormat
 // Maps to: Python class FixedFormat (dataclass, frozen=True)
@@ -113,9 +109,55 @@ inline int64_t fx_neg(const FixedFormat& fmt, int64_t a) {
 // __int128 prevents overflow when both operands are large int64_t.
 // Python uses arbitrary-precision integers, so no overflow there.
 inline int64_t fx_mul(const FixedFormat& fmt, int64_t a, int64_t b) {
-    __int128 product = static_cast<__int128>(a) * static_cast<__int128>(b);
-    int64_t  shifted = static_cast<int64_t>(product >> fmt.frac_bits);
+    int64_t product = a * b; 
+    int64_t shifted = static_cast<int64_t>(product >> fmt.frac_bits); 
     return fmt.saturate(shifted);
+}
+
+// Three-input saturating add — mirrors fx_adder_s6.sv (a + b + c, saturate).
+// Used for the per-axis sum of the three magnet contributions in S6a.
+inline int64_t fx_add3(const FixedFormat& fmt, int64_t a, int64_t b, int64_t c) {
+    return fmt.saturate(a + b + c);
+}
+
+// Three-input saturating subtract — mirrors fx_sub_three_input.sv (a - b - c).
+// Used in S6e: ax = mu*sum_dxf - gamma*vx - omega2*x.
+inline int64_t fx_sub3(const FixedFormat& fmt, int64_t a, int64_t b, int64_t c) {
+    return fmt.saturate(a - b - c);
+}
+
+// Hardware q-format constants. The RTL fixes these (lut_bram.sv / fx_adder_s3.sv):
+//   main datapath : Q4.14  (W=18, F=14)
+//   q value       : Q5.13  (18-bit unsigned, range [0,32))
+// These are intentionally hard-coded because the LUT addressing and the
+// Q4.14->Q5.13 conversion below only make sense at the synthesised widths.
+namespace hw {
+    constexpr int     W          = 18;
+    constexpr int     F          = 14;          // Q4.14 fractional bits
+    constexpr int64_t Q_SAT      = (int64_t(1) << W) - 1;   // 0x3FFFF, 18-bit unsigned max
+    constexpr int     LUT_SIZE   = 4096;
+    constexpr int     LUT_SHIFT  = 6;           // idx = q_raw[17:6] -> q_raw >> 6
+    constexpr int64_t LUT_SAT    = 0x1FFFF;     // gen_lut.py SAT_MAX (Q4.14 output)
+    constexpr double  Q_MAX_REAL = 32.0;        // LUT covers q in [0, 32)
+}
+
+// hw_build_q
+// Mirrors fx_adder_s3.sv exactly.
+//
+//   sum_q414 = dx2 + dy2 + h2          (non-negative Q4.14, up to 20 bits)
+//   q_q513   = sum_q414 >> 1           (Q4.14 -> Q5.13, 19-bit)
+//   q        = (q_q513[18]) ? 0x3FFFF : q_q513[17:0]   (saturate to 18-bit)
+//
+// Returns an unsigned Q5.13 value (range [0, 32)) used both for the LUT
+// address and for the nearest-magnet / settle comparisons.
+inline int64_t hw_build_q(int64_t dx2, int64_t dy2, int64_t h2) {
+    uint64_t sum = static_cast<uint64_t>(dx2) +
+                   static_cast<uint64_t>(dy2) +
+                   static_cast<uint64_t>(h2);     // Q4.14
+    uint64_t q19 = sum >> 1;                       // Q5.13, 19-bit
+    if (q19 & (uint64_t(1) << 18))                 // bit 18 set -> overflow
+        return hw::Q_SAT;
+    return static_cast<int64_t>(q19 & 0x3FFFF);    // low 18 bits
 }
 
 // PhysicsParams
@@ -184,8 +226,11 @@ struct FixedConstants {
     int64_t h2;
     int64_t mu;
     int64_t dt;
-    int64_t r2_settle;   // r_settle^2 in fixed-point
-    int64_t v2_settle;   // v_settle^2 in fixed-point
+    // Settle thresholds — match the AXI register inputs to settle_check_s3.sv:
+    //   sum_r_settle_sq_h_sq : r_settle^2 + h^2, in Q5.13 (compared against min_q)
+    //   v_settle             : v_settle, in Q4.14 (compared against |vx| and |vy|)
+    int64_t sum_r_settle_sq_h_sq;
+    int64_t v_settle;
 
     struct FixedMagnet { int64_t x, y; };
     std::vector<FixedMagnet> magnets;
@@ -199,13 +244,25 @@ FixedConstants build_fixed_constants(
     const std::vector<MagnetPos>& magnets)
 {
     FixedConstants c;
-    c.gamma     = fmt.to_fixed(phys.gamma);
-    c.omega2    = fmt.to_fixed(phys.omega2);
-    c.h2        = fmt.to_fixed(phys.h2);
-    c.mu        = fmt.to_fixed(phys.mu);
-    c.dt        = fmt.to_fixed(phys.dt);
-    c.r2_settle = fmt.to_fixed(sim.r_settle * sim.r_settle);
-    c.v2_settle = fmt.to_fixed(sim.v_settle * sim.v_settle);
+    c.gamma  = fmt.to_fixed(phys.gamma);
+    c.omega2 = fmt.to_fixed(phys.omega2);
+    c.h2     = fmt.to_fixed(phys.h2);
+    c.mu     = fmt.to_fixed(phys.mu);
+    c.dt     = fmt.to_fixed(phys.dt);
+
+    // v_settle in Q4.14, same format as |vx|, |vy| inside the lane.
+    c.v_settle = fmt.to_fixed(sim.v_settle);
+
+    // sum_r_settle_sq_h_sq in Q5.13 (q-format), compared directly against min_q.
+    // Software pre-computes r_settle^2 + h^2 and writes it to the AXI register.
+    {
+        double  thr_real = sim.r_settle * sim.r_settle + phys.h2;
+        int64_t q_scale  = int64_t(1) << (hw::F - 1);        // 2^13 (Q5.13)
+        int64_t raw      = static_cast<int64_t>(std::llround(thr_real * q_scale));
+        if (raw < 0)            raw = 0;
+        if (raw > hw::Q_SAT)    raw = hw::Q_SAT;
+        c.sum_r_settle_sq_h_sq = raw;
+    }
 
     for (const auto& m : magnets)
         c.magnets.push_back({ fmt.to_fixed(m.x), fmt.to_fixed(m.y) });
@@ -214,183 +271,143 @@ FixedConstants build_fixed_constants(
 }
 
 // InversePowerLUT
-// Maps to: Python dataclass InversePowerLUT (frozen=True)
+// Mirrors the hardware BRAM (lut_bram.sv) loaded from gen_lut.py output.
 //
-// Lookup table approximating f(q) = q^(-3/2).
-// Uniform sampling, no interpolation — matches Python LUT exactly.
+// The table stores f(q) = q^(-3/2) for q in [0, 32), sampled at 4096 points
+// with Q_PER_INDEX = 32/4096. Values are Q4.14, saturated at 0x1FFFF.
+// Lookup uses the same address decode as the RTL: idx = q_raw[17:6].
 
 struct InversePowerLUT {
-    int64_t              q_min_raw;
-    int64_t              q_max_raw;
-    std::vector<int64_t> values_raw;
+    std::vector<int64_t> values_raw;   // Q4.14, hw::LUT_SIZE entries
 
-    // Python: def lookup(self, q_raw)
-    //
-    // 1. Clip q to LUT range.
-    // 2. Compute table index: idx = (q_clip - q_min) * (N-1) / (q_max - q_min)
-    // 3. Return stored value.
-    //
-    // No interpolation — matches Python and FPGA BRAM behaviour.
+    // lut_bram.sv: idx = (|addr[19:18]) ? 0xFFF : addr[17:6]
+    // q is an 18-bit Q5.13 value, so addr[19:18] is always 0 and
+    //   idx = q_raw >> 6   (clamped to [0, LUT_SIZE-1] for safety).
     int64_t lookup(int64_t q_raw) const {
-        int64_t q_clip = std::max(q_min_raw, std::min(q_max_raw, q_raw));
-        int64_t n      = static_cast<int64_t>(values_raw.size()) - 1;
-        int64_t denom  = std::max(int64_t(1), q_max_raw - q_min_raw);
-        int64_t idx    = (q_clip - q_min_raw) * n / denom;
-        idx = std::max(int64_t(0), std::min(n, idx));
+        int64_t idx = q_raw >> hw::LUT_SHIFT;
+        if (idx < 0) idx = 0;
+        if (idx >= static_cast<int64_t>(values_raw.size()))
+            idx = static_cast<int64_t>(values_raw.size()) - 1;
         return values_raw[static_cast<size_t>(idx)];
     }
 };
 
-// Python: def build_inverse_power_lut(fmt, cfg)
+// build_inverse_power_lut_hw
+// Reproduces gen_lut.py exactly:
 //
-// Build LUT from h2 to lut_q_max.
-// q starts at h2 because q = dx^2 + dy^2 + h2 >= h2 always.
-InversePowerLUT build_inverse_power_lut(
-    const FixedFormat&      fmt_q,
-    const PhysicsParams&    phys,
-    const SimulationParams& sim)
-{
-    double q_min = phys.h2;
-    double q_max = sim.lut_q_max;
-
-    if (q_max <= q_min)
-        throw std::invalid_argument("lut_q_max must be larger than h2");
-
-    FixedFormat fmt_out(16, fmt_q.frac_bits);
+//   for i in range(LUT_SIZE):
+//       q = i * (32 / LUT_SIZE)
+//       val = 0x1FFFF                 if q == 0
+//           = round(q^-1.5 * 2^F)     otherwise, saturated to 0x1FFFF
+//
+// The resulting table is identical to qinv32.mem used by the FPGA.
+InversePowerLUT build_inverse_power_lut_hw() {
+    const double scale = static_cast<double>(int64_t(1) << hw::F);  // 2^14
+    const double q_per = hw::Q_MAX_REAL / hw::LUT_SIZE;             // 32/4096
 
     InversePowerLUT lut;
-    lut.q_min_raw = fmt_q.to_fixed(q_min);
-    lut.q_max_raw = fmt_q.to_fixed(q_max);
-    lut.values_raw.resize(sim.lut_size);
+    lut.values_raw.resize(hw::LUT_SIZE);
 
-    for (int i = 0; i < sim.lut_size; i++) {
-        // Python: np.linspace(q_min, q_max, lut_size)
-        double t = static_cast<double>(i) / (sim.lut_size - 1);
-        double q = q_min + t * (q_max - q_min);
-        double f = std::pow(q, -1.5);
-        lut.values_raw[i] = fmt_out.to_fixed(f);
+    for (int i = 0; i < hw::LUT_SIZE; i++) {
+        double  q = i * q_per;
+        int64_t val;
+        if (q == 0.0) {
+            val = hw::LUT_SAT;                   // q^-3/2 -> inf, saturate
+        } else {
+            double raw = std::pow(q, -1.5) * scale;
+            val = (raw >= static_cast<double>(hw::LUT_SAT))
+                      ? hw::LUT_SAT
+                      : static_cast<int64_t>(std::llround(raw));
+        }
+        lut.values_raw[i] = val;
     }
-
     return lut;
 }
 
-// inverse_q_power_fixed
-// Maps to: Python def inverse_q_power_fixed(fmt, cfg, q_raw, lut)
-//
-// Two modes:
-//   float-force: convert to float, compute q^(-1.5), convert back
-//   lut-force:   look up precomputed table
+// LaneStepResult — the outputs of one hardware lane pass.
+struct LaneStepResult {
+    int64_t x, y, vx, vy;   // integrated (post-step) state
+    int     nearest;        // nearest magnet index 0..2 (evaluated pre-step)
+    bool    settle_now;     // settle condition met this step (pre-step state)
+};
 
-inline int64_t inverse_q_power_fixed(
-    const FixedFormat&      fmt,
-    bool                    use_lut,
-    const InversePowerLUT*  lut,
-    int64_t                 q_raw)
-{
-    if (use_lut) {
-        return lut->lookup(q_raw);
-    } else {
-        // float-force: matches Python
-        //   q_float = fmt.to_float(q_raw)
-        //   f_float = q_float ** (-1.5)
-        //   return fmt.to_fixed(f_float)
-        double q_f = fmt.to_float(q_raw);
-        if (q_f <= 0.0) return fmt.max_raw; // guard against zero
-        double f   = std::pow(q_f, -1.5);
-        return fmt.to_fixed(f);
-    }
-}
-
-// acceleration_fixed
-// Maps to: Python def acceleration_fixed(fmt, cfg, const, x, y, vx, vy, lut)
+// hw_lane_step
+// Bit-faithful port of lane_main.sv (stages S1..S8).
 //
-// Computes ax, ay for one pixel using fixed-point arithmetic.
+// The nearest-magnet and settle decision are evaluated on the INCOMING state
+// (RTL stage S3, before integration), exactly as the hardware does, then the
+// state is advanced with semi-implicit Euler (S5..S8).
 //
-// Equation:
-//   ax = -gamma*vx - omega2*x + mu * sum_i [ dx_i * q_i^(-3/2) ]
-//   ay = -gamma*vy - omega2*y + mu * sum_i [ dy_i * q_i^(-3/2) ]
+//   q_i  = ((dx_i^2 + dy_i^2 + h2) >> 1)            [fx_adder_s3 -> Q5.13]
+//   f_i  = LUT[q_i]                                  [lut_bram   -> Q4.14]
+//   ax   = mu*(dxf_0+dxf_1+dxf_2) - gamma*vx - omega2*x
+//   vx' = vx + dt*ax ;  x' = x + dt*vx'
 //
-// where q_i = dx_i^2 + dy_i^2 + h2
-
-void acceleration_fixed(
+// The mu factor is applied AFTER summing the per-magnet terms (matches S6),
+// which is numerically distinct from multiplying mu per magnet.
+LaneStepResult hw_lane_step(
     const FixedFormat&     fmt,
     const FixedConstants&  c,
-    bool                   use_lut,
-    const InversePowerLUT* lut,
-    int64_t  x,  int64_t  y,
-    int64_t  vx, int64_t  vy,
-    int64_t& ax_out, int64_t& ay_out)
+    const InversePowerLUT& lut,
+    int64_t x, int64_t y, int64_t vx, int64_t vy)
 {
-    FixedFormat fmt_q(19, fmt.frac_bits);
-    // Python:
-    //   ax = fx_add(fmt,
-    //       fx_neg(fmt, fx_mul(fmt, const.gamma, vx)),
-    //       fx_neg(fmt, fx_mul(fmt, const.omega2, x)))
-    int64_t ax = fx_add(fmt,
-        fx_neg(fmt, fx_mul(fmt, c.gamma,  vx)),
-        fx_neg(fmt, fx_mul(fmt, c.omega2, x)));
+    const int NM = static_cast<int>(c.magnets.size());
 
-    int64_t ay = fx_add(fmt,
-        fx_neg(fmt, fx_mul(fmt, c.gamma,  vy)),
-        fx_neg(fmt, fx_mul(fmt, c.omega2, y)));
-
-    // Python: for mx_raw, my_raw in const.magnets:
-    for (const auto& m : c.magnets) {
-        // Python: dx = fx_sub(fmt, mx_raw, x)
-        int64_t dx  = fx_sub(fmt, m.x, x);
-        int64_t dy  = fx_sub(fmt, m.y, y);
-
-        // Python: dx2 = fx_mul(fmt, dx, dx)
-        int64_t dx2 = fx_mul(fmt, dx, dx);
-        int64_t dy2 = fx_mul(fmt, dy, dy);
-
-        // Python: q = fx_add(fmt, fx_add(fmt, dx2, dy2), const.h2)
-        int64_t q = fx_add(fmt_q, fx_add(fmt, dx2, dy2), c.h2);
-
-        // Python: f = inverse_q_power_fixed(fmt, cfg, q, lut)
-        int64_t f = inverse_q_power_fixed(fmt_q, use_lut, lut, q);
-
-        // Python: ax = fx_add(fmt, ax, fx_mul(fmt, const.mu, fx_mul(fmt, dx, f)))
-        ax = fx_add(fmt, ax, fx_mul(fmt, c.mu, fx_mul(fmt, dx, f)));
-        ay = fx_add(fmt, ay, fx_mul(fmt, c.mu, fx_mul(fmt, dy, f)));
+    // ── S1/S2/S3a: dx, dy, dx^2, dy^2, q ─────────────────────────────
+    std::vector<int64_t> dx(NM), dy(NM), q(NM);
+    for (int i = 0; i < NM; i++) {
+        dx[i] = fx_sub(fmt, c.magnets[i].x, x);   // Q4.14, saturating
+        dy[i] = fx_sub(fmt, c.magnets[i].y, y);
+        int64_t dx2 = fx_mul(fmt, dx[i], dx[i]);  // Q4.14
+        int64_t dy2 = fx_mul(fmt, dy[i], dy[i]);
+        q[i] = hw_build_q(dx2, dy2, c.h2);        // Q5.13
     }
 
-    ax_out = ax;
-    ay_out = ay;
-}
-
-// nearest_magnet_fixed
-// Maps to: Python def nearest_magnet_fixed(fmt, const, x, y)
-//
-// Returns index of nearest magnet and squared distance to it.
-// Tie-breaking: lowest index wins (matches Python argmin behaviour).
-
-int nearest_magnet_fixed(
-    const FixedFormat&    fmt,
-    const FixedConstants& c,
-    int64_t x, int64_t y,
-    int64_t& d2_min_out)
-{
+    // ── S3b: nearest magnet (lowest index wins on tie, q0<=q1<=q2) ────
     int     nearest = 0;
-    int64_t d2_min  = INT64_MAX;
-
-    for (int i = 0; i < static_cast<int>(c.magnets.size()); i++) {
-        // Python: dx = fx_sub(fmt, mx_raw, x)
-        int64_t dx = fx_sub(fmt, c.magnets[i].x, x);
-        int64_t dy = fx_sub(fmt, c.magnets[i].y, y);
-
-        // Python: d2 = fx_add(fmt, fx_mul(fmt, dx, dx), fx_mul(fmt, dy, dy))
-        int64_t d2 = fx_add(fmt, fx_mul(fmt, dx, dx), fx_mul(fmt, dy, dy));
-
-        // Python: np.argmin — lowest index wins on tie
-        if (d2 < d2_min) {
-            d2_min  = d2;
-            nearest = i;
-        }
+    int64_t min_q   = q[0];
+    for (int i = 1; i < NM; i++) {
+        if (q[i] < min_q) { min_q = q[i]; nearest = i; }
     }
 
-    d2_min_out = d2_min;
-    return nearest;
+    // ── S3c: settle check (per-component velocity, squared distance) ──
+    int64_t abs_vx = (vx < 0) ? -vx : vx;
+    int64_t abs_vy = (vy < 0) ? -vy : vy;
+    bool settle_now = (min_q  < c.sum_r_settle_sq_h_sq) &&
+                      (abs_vx < c.v_settle)             &&
+                      (abs_vy < c.v_settle);
+
+    // ── S4/S5: f_i = LUT[q_i], then dxf_i = dx_i*f_i ─────────────────
+    int64_t dxf[3] = {0,0,0}, dyf[3] = {0,0,0};
+    for (int i = 0; i < NM; i++) {
+        int64_t f = lut.lookup(q[i]);             // Q4.14
+        dxf[i] = fx_mul(fmt, dx[i], f);           // Q4.14
+        dyf[i] = fx_mul(fmt, dy[i], f);
+    }
+
+    // ── S6a: saturating 3-input sum of the magnet contributions ──────
+    int64_t sum_dxf = fx_add3(fmt, dxf[0], dxf[1], dxf[2]);
+    int64_t sum_dyf = fx_add3(fmt, dyf[0], dyf[1], dyf[2]);
+
+    // ── S6a..S6c: damping, restoring, and mu scaling ─────────────────
+    int64_t gamma_vx  = fx_mul(fmt, c.gamma,  vx);
+    int64_t gamma_vy  = fx_mul(fmt, c.gamma,  vy);
+    int64_t omega2_x  = fx_mul(fmt, c.omega2, x);
+    int64_t omega2_y  = fx_mul(fmt, c.omega2, y);
+    int64_t mu_dxf    = fx_mul(fmt, c.mu, sum_dxf);
+    int64_t mu_dyf    = fx_mul(fmt, c.mu, sum_dyf);
+
+    // ── S6e: ax = mu*sum_dxf - gamma*vx - omega2*x ───────────────────
+    int64_t ax = fx_sub3(fmt, mu_dxf, gamma_vx, omega2_x);
+    int64_t ay = fx_sub3(fmt, mu_dyf, gamma_vy, omega2_y);
+
+    // ── S7/S8: semi-implicit Euler (velocity first, then position) ───
+    int64_t vx_new = fx_add(fmt, vx, fx_mul(fmt, c.dt, ax));
+    int64_t vy_new = fx_add(fmt, vy, fx_mul(fmt, c.dt, ay));
+    int64_t x_new  = fx_add(fmt, x,  fx_mul(fmt, c.dt, vx_new));
+    int64_t y_new  = fx_add(fmt, y,  fx_mul(fmt, c.dt, vy_new));
+
+    return { x_new, y_new, vx_new, vy_new, nearest, settle_now };
 }
 
 // make_initial_grid_fixed
@@ -482,18 +499,10 @@ BasinResult generate_basin_map_fixed(
     const RenderParams&         render,
     const std::vector<MagnetPos>& magnets)
 {
-    // Build fixed-point constants and optional LUT once before the loop.
-    // Python: const = build_fixed_constants(fmt, cfg)
-    //         lut   = build_inverse_power_lut(fmt, cfg) if lut-force else None
-    FixedFormat fmt_q(19, fmt.frac_bits); 
-
-    FixedConstants c = build_fixed_constants(fmt, phys, sim, magnets);
-
-
-    InversePowerLUT lut;
-    if (sim.use_lut)
-        lut = build_inverse_power_lut(fmt_q, phys, sim);
-    const InversePowerLUT* lut_ptr = sim.use_lut ? &lut : nullptr;
+    // Build fixed-point constants and the hardware LUT once before the loop.
+    // The hardware has no float-force path: the LUT (qinv32.mem) is always used.
+    FixedConstants  c   = build_fixed_constants(fmt, phys, sim, magnets);
+    InversePowerLUT lut = build_inverse_power_lut_hw();
 
     int n = render.width * render.height;
 
@@ -525,69 +534,35 @@ BasinResult generate_basin_map_fixed(
         for (int i = 0; i < n; i++) {
             if (!active[i]) continue;
 
-            // ── Acceleration ────────────────────────────────
-            // Python: ax, ay = acceleration_fixed(fmt, cfg, const, x, y, vx, vy, lut)
-            int64_t ax, ay;
-            acceleration_fixed(fmt, c, sim.use_lut, lut_ptr,
-                               x[i], y[i], vx[i], vy[i], ax, ay);
+            // One hardware lane pass: settle is evaluated on the incoming
+            // state (RTL S3), then the state is integrated (RTL S5..S8).
+            LaneStepResult s = hw_lane_step(fmt, c, lut, x[i], y[i], vx[i], vy[i]);
 
-            // ── Semi-implicit Euler: velocity update ─────────
-            // Python:
-            //   vx_new = fx_add(fmt, vx, fx_mul(fmt, const.dt, ax))
-            //   vy_new = fx_add(fmt, vy, fx_mul(fmt, const.dt, ay))
-            //   vx[active] = vx_new[active]
-            //   vy[active] = vy_new[active]
-            int64_t vx_new = fx_add(fmt, vx[i], fx_mul(fmt, c.dt, ax));
-            int64_t vy_new = fx_add(fmt, vy[i], fx_mul(fmt, c.dt, ay));
-            vx[i] = vx_new;
-            vy[i] = vy_new;
-
-            // ── Semi-implicit Euler: position update ─────────
-            // Python:
-            //   x_new = fx_add(fmt, x, fx_mul(fmt, const.dt, vx))  <- vx already updated
-            //   y_new = fx_add(fmt, y, fx_mul(fmt, const.dt, vy))
-            //   x[active] = x_new[active]
-            //   y[active] = y_new[active]
-            //
-            // Note: Python uses the NEW vx/vy here (semi-implicit Euler).
-            // After the vx[active] = vx_new[active] line, vx IS the new velocity.
-            x[i] = fx_add(fmt, x[i], fx_mul(fmt, c.dt, vx_new));
-            y[i] = fx_add(fmt, y[i], fx_mul(fmt, c.dt, vy_new));
-
-            // ── Settling check ───────────────────────────────
-            // Python:
-            //   nearest, d2_min = nearest_magnet_fixed(fmt, const, x, y)
-            //   speed2 = fx_add(fmt, fx_mul(fmt, vx, vx), fx_mul(fmt, vy, vy))
-            //   settle_now = active & (d2_min < const.r2_settle) & (speed2 < const.v2_settle)
-            int64_t d2_min;
-            int nearest = nearest_magnet_fixed(fmt, c, x[i], y[i], d2_min);
-
-            int64_t speed2 = fx_add(fmt,
-                fx_mul(fmt, vx[i], vx[i]),
-                fx_mul(fmt, vy[i], vy[i]));
-
-            bool settle_now = (d2_min < c.r2_settle) && (speed2 < c.v2_settle);
-
-            // Python:
-            //   consec[settle_now] += 1
-            //   consec[active & ~settle_now] = 0
-            if (settle_now) {
-                consec[i]++;
+            // ── settle_count (settle_check_s3): saturate at 3 ────────────
+            if (s.settle_now) {
+                if (consec[i] < 3) consec[i]++;   // 2-bit counter, saturates at 3
             } else {
                 consec[i] = 0;
             }
 
-            // Python:
-            //   done_now = active & (consec >= sim.min_consec)
-            //   basin[done_now]   = nearest[done_now]
-            //   steps[done_now]   = step
-            //   settled[done_now] = True
-            //   active[done_now]  = False
+            // ── commit integrated state ──────────────────────────────────
+            x[i]  = s.x;  y[i]  = s.y;
+            vx[i] = s.vx; vy[i] = s.vy;
+
+            // ── detect_settle: settled has priority over time_out ────────
+            //   settled  = (settle_count >= consec_settle_count)
+            //   time_out = ~settled && (step_cnt >= max_steps)
             if (consec[i] >= sim.min_consec) {
-                basin[i]   = static_cast<int16_t>(nearest);
+                basin[i]   = static_cast<int16_t>(s.nearest);
                 steps[i]   = step;
                 settled[i] = 1;
                 active[i]  = false;
+                active_count--;
+            } else if (step >= sim.max_steps) {
+                steps[i] = step;
+                if (sim.classify_on_timeout)
+                    basin[i] = static_cast<int16_t>(s.nearest);
+                active[i] = false;
                 active_count--;
             }
         }
@@ -607,23 +582,9 @@ BasinResult generate_basin_map_fixed(
         if (active_count == 0) break;
     }
 
-    // Python:
-    //   if np.any(active):
-    //       nearest, _ = nearest_magnet_fixed(fmt, const, x, y)
-    //       if sim.classify_on_timeout:
-    //           basin[active] = nearest[active]
-    //       steps[active] = sim.max_steps
-    if (active_count > 0) {
-        for (int i = 0; i < n; i++) {
-            if (!active[i]) continue;
-            steps[i] = sim.max_steps;
-            if (sim.classify_on_timeout) {
-                int64_t d2_min;
-                int nearest = nearest_magnet_fixed(fmt, c, x[i], y[i], d2_min);
-                basin[i] = static_cast<int16_t>(nearest);
-            }
-        }
-    }
+    // Timeout (step_cnt >= max_steps) is handled inside the loop above, exactly
+    // as detect_settle.sv routes a timed-out pixel to the output FIFO with the
+    // nearest-magnet classification computed in that step.
 
     auto t1 = std::chrono::high_resolution_clock::now();
     double elapsed_s = std::chrono::duration<double>(t1 - t0).count();
@@ -633,134 +594,6 @@ BasinResult generate_basin_map_fixed(
 
 // Output helpers
 // Maps to: Python save_outputs(), print summary prints
-
-// Create path and all parents (like pathlib.Path.mkdir(parents=True)).
-static bool mkdir_p(const std::string& path) {
-    if (path.empty())
-        return false;
-    struct stat st;
-    if (stat(path.c_str(), &st) == 0)
-        return S_ISDIR(st.st_mode);
-    const size_t slash = path.find_last_of('/');
-    if (slash != std::string::npos) {
-        const std::string parent = path.substr(0, slash);
-        if (!parent.empty() && !mkdir_p(parent))
-            return false;
-    }
-    if (mkdir(path.c_str(), 0755) != 0 && errno != EEXIST)
-        return false;
-    return stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
-}
-
-// Flask integration — fetch controller params from GET /info, repost via export_to_flask.py
-
-struct FlaskConfig {
-    double magnetic_strength = 1.0;
-    double damping_factor    = 0.20;
-    double pendulum_length   = 9.8;
-    double pendulum_height   = 0.5;
-    bool   fetched           = false;
-};
-
-static std::string shell_escape(const std::string& value) {
-    std::string escaped = "\"";
-    for (char ch : value) {
-        if (ch == '"' || ch == '\\' || ch == '$' || ch == '`')
-            escaped.push_back('\\');
-        escaped.push_back(ch);
-    }
-    escaped.push_back('"');
-    return escaped;
-}
-
-static std::string http_get(const std::string& url) {
-    const std::string cmd = "curl -sf " + shell_escape(url);
-    FILE* pipe = popen(cmd.c_str(), "r");
-    if (!pipe)
-        throw std::runtime_error("Failed to run curl");
-
-    std::string response;
-    char buffer[4096];
-    while (true) {
-        size_t n = std::fread(buffer, 1, sizeof(buffer), pipe);
-        if (n == 0)
-            break;
-        response.append(buffer, n);
-    }
-
-    const int status = pclose(pipe);
-    if (status != 0 || response.empty())
-        throw std::runtime_error("HTTP GET failed: " + url);
-
-    return response;
-}
-
-static bool json_number(const std::string& json, const std::string& key, double& out) {
-    const std::string needle = "\"" + key + "\":";
-    const size_t pos = json.find(needle);
-    if (pos == std::string::npos)
-        return false;
-
-    size_t i = pos + needle.size();
-    while (i < json.size() && std::isspace(static_cast<unsigned char>(json[i])))
-        i++;
-
-    char* end = nullptr;
-    out = std::strtod(json.c_str() + i, &end);
-    return end != json.c_str() + i;
-}
-
-static FlaskConfig fetch_flask_config(const std::string& flask_base) {
-    const std::string json = http_get(flask_base + "/info");
-
-    FlaskConfig cfg;
-    if (!json_number(json, "magnetic_strength", cfg.magnetic_strength) ||
-        !json_number(json, "damping_factor",    cfg.damping_factor)    ||
-        !json_number(json, "pendulum_length",   cfg.pendulum_length)   ||
-        !json_number(json, "pendulum_height",    cfg.pendulum_height)) {
-        throw std::runtime_error("Flask /info JSON missing required controller fields");
-    }
-
-    cfg.fetched = true;
-
-    if (cfg.pendulum_height <= 0.0)
-        throw std::runtime_error("Flask pendulum_height must be positive");
-    if (cfg.pendulum_length <= 0.0)
-        throw std::runtime_error("Flask pendulum_length must be positive");
-
-    return cfg;
-}
-
-// Unity slider labels map directly onto the simplified model:
-//   damping_factor    -> gamma
-//   magnetic_strength -> mu
-//   pendulum_length L -> omega2 = g / L
-//   pendulum_height h -> h2 = h^2
-static void apply_flask_config(PhysicsParams& phys, const FlaskConfig& cfg) {
-    constexpr double g = 9.8;
-
-    phys.gamma  = cfg.damping_factor;
-    phys.mu     = cfg.magnetic_strength;
-    phys.omega2 = g / cfg.pendulum_length;
-    phys.h2     = cfg.pendulum_height * cfg.pendulum_height;
-}
-
-static void repost_to_flask(const std::string& flask_base) {
-    const std::string arg = shell_escape(flask_base);
-    const std::string cmd_venv =
-        ".venv/bin/python Software/export_to_flask.py --flask-base " + arg;
-    const std::string cmd_system =
-        "python3 Software/export_to_flask.py --flask-base " + arg;
-
-    std::cout << "\nReposting image and magnets to Flask...\n";
-    if (std::system(cmd_venv.c_str()) == 0)
-        return;
-    if (std::system(cmd_system.c_str()) == 0)
-        return;
-
-    throw std::runtime_error(
-        "Failed to repost results via Software/export_to_flask.py");
-}
 
 // Save raw binary file — readable in Python with np.fromfile
 template<typename T>
@@ -794,7 +627,9 @@ void save_summary_json(
     std::sort(sorted_steps.begin(), sorted_steps.end());
     int p99_steps = sorted_steps[static_cast<size_t>(0.99 * n)];
 
-    int integer_bits = fmt.total_bits - fmt.frac_bits - 1;
+    // Integer-bit count uses the RTL convention (sign bit included in the
+    // integer part), so an 18-bit / 14-frac value is labelled Q4.14 like the HW.
+    int integer_bits = fmt.total_bits - fmt.frac_bits;
 
     std::ofstream f(path);
     if (!f) throw std::runtime_error("Cannot open " + path);
@@ -845,7 +680,9 @@ void print_summary(
     const BasinResult&   result)
 {
     int n            = render.width * render.height;
-    int integer_bits = fmt.total_bits - fmt.frac_bits - 1;
+    // Integer-bit count uses the RTL convention (sign bit included in the
+    // integer part), so an 18-bit / 14-frac value is labelled Q4.14 like the HW.
+    int integer_bits = fmt.total_bits - fmt.frac_bits;
     int strict       = 0;
 
     for (int i = 0; i < n; i++)
@@ -878,36 +715,33 @@ void print_summary(
 // Maps to: Python def parse_args() and build_config_from_args()
 
 struct Args {
-    // FixedFormat
-    int    total_bits  = 16;
-    int    frac_bits   = 12;
-    // RenderParams
-    int    width       = 160;
-    int    height      = 120;
+    // FixedFormat — matches the 9-lane RTL datapath (W=18, F=14 -> Q4.14)
+    int    total_bits  = 18;
+    int    frac_bits   = 14;
+    // RenderParams — matches pixel_generator_9_lanes.v (IMG_W=IMG_H=270)
+    int    width       = 270;
+    int    height      = 270;
     double x_min       = -1.8;
     double x_max       =  1.8;
     double y_min       = -1.8;
     double y_max       =  1.8;
-    // PhysicsParams
+    // PhysicsParams (runtime AXI registers on hardware; canonical defaults here)
     double gamma       = 0.20;
     double omega2      = 1.0;
     double h2          = 0.25;
     double mu          = 1.0;
     double dt          = 0.01;
-    // SimulationParams
-    int    max_steps   = 4095;
+    // SimulationParams — max_steps matches TRAJ_DEPTH (4096)
+    int    max_steps   = 4096;
     double r_settle    = 0.30;
     double v_settle    = 0.05;
     int    min_consec  = 3;
-    bool   use_lut     = true;
+    bool   use_lut     = true;   // hardware is LUT-only; kept for CLI compatibility
     int    lut_size    = 4096;
-    double lut_q_max   = 64.0;
+    double lut_q_max   = 32.0;   // hardware LUT covers q in [0, 32)
     bool   no_classify_on_timeout = false;
     // OutputParams
     std::string out_dir = "cpp_outputs";
-    // Flask integration
-    std::string flask_base = "http://35.179.111.223:5000/";
-    bool        use_flask  = true;
 };
 
 Args parse_args(int argc, char* argv[]) {
@@ -936,8 +770,6 @@ Args parse_args(int argc, char* argv[]) {
         else if (key == "--lut-size")    { a.lut_size    = std::stoi(val); i++; }
         else if (key == "--lut-q-max")   { a.lut_q_max   = std::stod(val); i++; }
         else if (key == "--out-dir")     { a.out_dir     = val;            i++; }
-        else if (key == "--flask-base")  { a.flask_base  = val;            i++; }
-        else if (key == "--no-flask")    { a.use_flask   = false; }
         else if (key == "--no-classify-on-timeout") { a.no_classify_on_timeout = true; }
         else if (key == "--force-mode") {
             a.use_lut = (val == "lut-force");
@@ -965,26 +797,6 @@ int main(int argc, char* argv[]) {
     phys.mu     = args.mu;
     phys.dt     = args.dt;
 
-    if (args.use_flask) {
-        try {
-            FlaskConfig flask = fetch_flask_config(args.flask_base);
-            apply_flask_config(phys, flask);
-            std::cout << "Flask controller params (GET /info)\n";
-            std::cout << "  magnetic_strength : " << flask.magnetic_strength << "\n";
-            std::cout << "  damping_factor    : " << flask.damping_factor    << "\n";
-            std::cout << "  pendulum_length   : " << flask.pendulum_length   << "\n";
-            std::cout << "  pendulum_height   : " << flask.pendulum_height   << "\n";
-            std::cout << "  -> gamma, mu, omega2, h2 : "
-                      << phys.gamma  << ", "
-                      << phys.mu     << ", "
-                      << phys.omega2 << ", "
-                      << phys.h2     << "\n\n";
-        } catch (const std::exception& ex) {
-            std::cerr << "Warning: Flask fetch failed (" << ex.what()
-                      << "); using CLI physics defaults.\n\n";
-        }
-    }
-
     SimulationParams sim;
     sim.max_steps           = args.max_steps;
     sim.r_settle            = args.r_settle;
@@ -1004,7 +816,9 @@ int main(int argc, char* argv[]) {
     render.height = args.height;
 
     // Python: print_run_header(fmt, cfg)
-    int integer_bits = fmt.total_bits - fmt.frac_bits - 1;
+    // Integer-bit count uses the RTL convention (sign bit included in the
+    // integer part), so an 18-bit / 14-frac value is labelled Q4.14 like the HW.
+    int integer_bits = fmt.total_bits - fmt.frac_bits;
     std::cout << "Fixed-point magnetic pendulum (C++ baseline)\n";
     std::cout << "resolution          : " << render.width
               << " x " << render.height << "\n";
@@ -1039,8 +853,7 @@ int main(int argc, char* argv[]) {
 
     // Python: save_outputs(...)
     // Create output directory
-    if (!mkdir_p(args.out_dir))
-        throw std::runtime_error("Cannot create output directory: " + args.out_dir);
+    std::filesystem::create_directories(args.out_dir);
 
     save_binary(result.basin,   args.out_dir + "/basin.bin");
     save_binary(result.steps,   args.out_dir + "/steps.bin");
@@ -1053,14 +866,6 @@ int main(int argc, char* argv[]) {
     std::cout << "  steps.bin      (int32, H x W, load: np.fromfile(..., np.int32))\n";
     std::cout << "  settled.bin    (uint8, H x W, load: np.fromfile(..., np.uint8))\n";
     std::cout << "  summary.json\n";
-
-    if (args.use_flask) {
-        try {
-            repost_to_flask(args.flask_base);
-        } catch (const std::exception& ex) {
-            std::cerr << "Warning: Flask repost failed (" << ex.what() << ")\n";
-        }
-    }
 
     return 0;
 }
