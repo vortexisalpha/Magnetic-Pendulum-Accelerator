@@ -41,17 +41,26 @@ public class PynqConnection : MonoBehaviour
     private const byte MSG_PARAMS = 0x01;
     private const byte MSG_MAGNETS = 0x02;
     private const byte MSG_VIEWPORT = 0x03;
+    private const byte MSG_TRAJ_REQ = 0x04;
     private const byte MSG_IMAGE = 0x10;
     private const byte MSG_INFO = 0x11;
+    private const byte MSG_TRAJ = 0x14;
     private const int IMAGE_HEADER = 9; //u16 w + u16 h + u8 depth + u32 version
+    private const int TRAJ_HEADER = 6; //u32 pixel_id + u16 n
 
     //events are always raised on the Unity main thread
     public event Action<ImageMessage> ImageReceived;
     public event Action<InfoMessage> InfoReceived;
+    public event Action<TrajectoryMessage> TrajectoryReceived;
 
     public ImageMessage LatestImage { get; private set; }
     public InfoMessage LatestInfo { get; private set; }
+    public TrajectoryMessage LatestTrajectory { get; private set; }
     public bool IsConnected => connected;
+
+    //pixel id of the most recent trajectory request, used to verify echoed replies
+    public uint LastRequestedTrajectoryPixelId { get; private set; }
+    public bool HasRequestedTrajectory { get; private set; }
 
     public int LatestSentParamVersion { get; private set; }
 
@@ -104,6 +113,10 @@ public class PynqConnection : MonoBehaviour
                 case InfoMessage info:
                     LatestInfo = info;
                     InfoReceived?.Invoke(info);
+                    break;
+                case TrajectoryMessage traj:
+                    LatestTrajectory = traj;
+                    TrajectoryReceived?.Invoke(traj);
                     break;
             }
         }
@@ -181,6 +194,15 @@ public class PynqConnection : MonoBehaviour
             y_max = yMax
         });
         SendJson(MSG_VIEWPORT, json);
+    }
+
+    //0x04 TRAJ_REQ: ask the board for the trajectory starting at the chosen pixel
+    public void SendTrajectoryRequest(uint pixelId)
+    {
+        LastRequestedTrajectoryPixelId = pixelId;
+        HasRequestedTrajectory = true;
+        string json = JsonConvert.SerializeObject(new { pixel_id = pixelId });
+        SendJson(MSG_TRAJ_REQ, json);
     }
 
     private void SendJson(byte type, string json)
@@ -287,6 +309,9 @@ public class PynqConnection : MonoBehaviour
                 case MSG_INFO:
                     inbound.Enqueue(DecodeInfo(payload));
                     break;
+                case MSG_TRAJ:
+                    inbound.Enqueue(DecodeTrajectory(payload));
+                    break;
                 default:
                     Debug.LogWarning($"[Pynq] unknown frame type 0x{type:X2} ({length} bytes)");
                     break;
@@ -348,6 +373,22 @@ public class PynqConnection : MonoBehaviour
         return info;
     }
 
+    //0x14 TRAJ: u32 pixel_id, u16 n, then n x (f32 x, f32 y), all big-endian
+    private static TrajectoryMessage DecodeTrajectory(byte[] p)
+    {
+        uint pixelId = ReadU32BE(p, 0);
+        int n = ReadU16BE(p, 4);
+
+        var points = new Vector2[n];
+        for (int i = 0; i < n; i++)
+        {
+            int o = TRAJ_HEADER + i * 8;
+            points[i] = new Vector2(ReadF32BE(p, o), ReadF32BE(p, o + 4));
+        }
+
+        return new TrajectoryMessage { pixelId = pixelId, points = points };
+    }
+
     private static void WriteU32BE(byte[] b, int o, uint v)
     {
         b[o] = (byte)(v >> 24);
@@ -360,4 +401,11 @@ public class PynqConnection : MonoBehaviour
         ((uint)b[o] << 24) | ((uint)b[o + 1] << 16) | ((uint)b[o + 2] << 8) | b[o + 3];
 
     private static int ReadU16BE(byte[] b, int o) => (b[o] << 8) | b[o + 1];
+
+    //reinterpret a big-endian 4-byte float regardless of host endianness
+    private static float ReadF32BE(byte[] b, int o)
+    {
+        uint bits = ReadU32BE(b, o);
+        return BitConverter.ToSingle(BitConverter.GetBytes(bits), 0);
+    }
 }
