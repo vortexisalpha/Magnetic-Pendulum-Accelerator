@@ -1,8 +1,8 @@
 module lane_main #(
     parameter W = 18,
     parameter F = 14,
-    parameter LUT_SIZE = 8192, // 8192 entries
-    parameter LUT_ADDR_W = 13, // 2^13 = 8192
+    parameter LUT_SIZE = 4096, // 4096 entries
+    parameter LUT_ADDR_W = 12, // 2^12 = 4096
     parameter Q_WIDTH = 18, // 0 to 26.2225 and everything else must be fractional.
     //therefore for q width use Q 5.13 implementation. unsigned
     parameter IMG_W = 160,
@@ -418,24 +418,28 @@ logic [1:0] s4a_magnet_id;
 
 logic [1:0] s4a_settle_count;
 
-lut_bram #(.W(W), .F(F), .LUT_SIZE(LUT_SIZE), .LUT_ADDR_W(LUT_ADDR_W)) lut0 (
+// new lut that coveres range q in [h2, h2 + 8)
+lut_bram #(.W(W), .F(F), .Q_WIDTH(Q_WIDTH), .LUT_SIZE(LUT_SIZE), .LUT_ADDR_W(LUT_ADDR_W)) lut0 (
     .clk(clk),
     .rst(rst),
-    .addr(s3c_q0),
+    .q(s3c_q0),
+    .h2(h2),
     .data_out(s4a_invq0)
 );
 
-lut_bram #(.W(W), .F(F), .LUT_SIZE(LUT_SIZE), .LUT_ADDR_W(LUT_ADDR_W)) lut1 (
+lut_bram #(.W(W), .F(F), .Q_WIDTH(Q_WIDTH), .LUT_SIZE(LUT_SIZE), .LUT_ADDR_W(LUT_ADDR_W)) lut1 (
     .clk(clk),
     .rst(rst),
-    .addr(s3c_q1),
+    .q(s3c_q1),
+    .h2(h2),
     .data_out(s4a_invq1)
 );
 
-lut_bram #(.W(W), .F(F), .LUT_SIZE(LUT_SIZE), .LUT_ADDR_W(LUT_ADDR_W)) lut2 (
+lut_bram #(.W(W), .F(F), .Q_WIDTH(Q_WIDTH), .LUT_SIZE(LUT_SIZE), .LUT_ADDR_W(LUT_ADDR_W)) lut2 (
     .clk(clk),
     .rst(rst),
-    .addr(s3c_q2),
+    .q(s3c_q2),
+    .h2(h2),
     .data_out(s4a_invq2)
 );
 

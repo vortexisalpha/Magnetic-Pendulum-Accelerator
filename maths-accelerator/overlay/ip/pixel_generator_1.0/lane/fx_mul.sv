@@ -32,8 +32,9 @@ module fx_mul #(
         else      product_r <= a * b;
     end
 
-    //S2: shift + saturateion happens here
-    wire signed [2*W-1-F:0] shifted = product_r >>> F;
+    //S2: round + shift + saturation happens here
+    wire signed [2*W-1:0] product_rnd = product_r + (1 <<< (F-1));
+    wire signed [2*W-1-F:0] shifted = product_rnd >>> F;
     wire overflow  = (shifted > SAT_MAX);
     wire underflow = (shifted < SAT_MIN);
     assign c = overflow ? SAT_MAX : underflow ? SAT_MIN : shifted[W-1:0];

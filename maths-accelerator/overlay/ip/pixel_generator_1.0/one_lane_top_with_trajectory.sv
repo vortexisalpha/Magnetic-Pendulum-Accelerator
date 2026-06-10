@@ -5,8 +5,8 @@
 module one_lane_top #(
     parameter W = 18,
     parameter F = 14,
-    parameter LUT_SIZE = 8192,
-    parameter LUT_ADDR_W = 13,
+    parameter LUT_SIZE = 4096,
+    parameter LUT_ADDR_W = 12,
     parameter Q_WIDTH = 18,
     parameter IMG_W = 360,
     parameter IMG_H = 360,

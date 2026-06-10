@@ -37,8 +37,10 @@ module fx_divide_by_100 #(
         else     product_r <= product_w;
     end
 
-    //S2: shift down and saturate
-    wire signed [2*W-1:0] shifted = product_r >>> 22;
+    //S2: round + shift down and saturate
+    // round 0.5 add 2^21 before shifting down by 22 bits
+    wire signed [2*W-1:0] product_rnd = product_r + (1 <<< 21);
+    wire signed [2*W-1:0] shifted     = product_rnd >>> 22;
     wire overflow  = (shifted > SAT_MAX);
     wire underflow = (shifted < SAT_MIN);
     assign c = overflow ? SAT_MAX : underflow ? SAT_MIN : shifted[W-1:0];

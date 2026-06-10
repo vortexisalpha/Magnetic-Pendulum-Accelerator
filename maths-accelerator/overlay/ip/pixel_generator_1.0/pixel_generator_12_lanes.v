@@ -210,7 +210,7 @@ wire [PXID_W-1:0] total_pix_w = NUM_LANES * slice_pix_w;
 // ID = lane ID, FD = Frame Done, FRD = Frame-buffer Read Data
 `define LANE_CONNECT(ID, FD, FRD) \
 one_lane_top #( \
-    .W(18), .F(14), .LUT_SIZE(8192), .LUT_ADDR_W(13), .Q_WIDTH(18), \
+    .W(18), .F(14), .LUT_SIZE(4096), .LUT_ADDR_W(12), .Q_WIDTH(18), \
     .IMG_W(MAX_IMG_W), .IMG_H(MAX_IMG_H), .LANE_ID(ID), .NUM_LANES(12) \
 ) u_lane``ID ( \
     .clk(out_stream_aclk), .rst(!periph_resetn), .start(start_w), \
