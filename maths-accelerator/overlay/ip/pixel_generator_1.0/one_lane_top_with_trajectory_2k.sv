@@ -6,7 +6,7 @@ module one_lane_top #(
     parameter LUT_SIZE = 4096,
     parameter LUT_ADDR_W = 12,
     parameter Q_WIDTH = 18,
-    parameter IMG_W = 2048,      // must be a power of two (raster id = row<<log2(IMG_W) | col)
+    parameter IMG_W = 2048,
     parameter IMG_H = 1080,
     parameter LANE_ID   = 0,     // 0..NUM_LANES-1
     parameter NUM_LANES = 12,
