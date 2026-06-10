@@ -1855,6 +1855,8 @@ MonoBehaviour:
   magneticStrengthController: {fileID: 1546847993}
   lengthController: {fileID: 1854858394}
   pendulumHeightController: {fileID: 816913695}
+  resXController: {fileID: 0}
+  resYController: {fileID: 0}
   panZoomController: {fileID: 1151704948}
   sendInterval: 0.1
 --- !u!4 &1681762938
@@ -2623,7 +2625,8 @@ MonoBehaviour:
   panZoom: {fileID: 1151704949}
   imageToggle: {fileID: 1598961383}
   overlayResolution: 512
-  lineColor: {r: 0, g: 1, b: 1, a: 1}
+  startColor: {r: 0, g: 1, b: 1, a: 1}
+  endColor: {r: 1, g: 0, b: 1, a: 1}
   lineThickness: 4
   closeButtonSize: {x: 36, y: 36}
   closeButtonMargin: {x: 6, y: 6}
