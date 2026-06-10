@@ -90,12 +90,14 @@ public class PynqConnection : MonoBehaviour
     private byte[] pendingParamsFrame;
     private float pendingDampingFactor, pendingMagneticStrength, pendingPendulumLength, pendingPendulumHeight;
     private bool pendingFss;
+    private int pendingResX, pendingResY;
     private int pendingParamVersion;
     private int pendingMinAcceptedImageVersion;
     private readonly object outboundLock = new object();
 
     private float lastSentDampingFactor, lastSentMagneticStrength, lastSentPendulumLength, lastSentPendulumHeight;
     private bool lastSentFss;
+    private int lastSentResX, lastSentResY;
     private bool hasSentParams;
 
     void Awake()
@@ -142,7 +144,8 @@ public class PynqConnection : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
-    public void SendParams(float dampingFactor, float magneticStrength, float pendulumLength, float pendulumHeight)
+    public void SendParams(float dampingFactor, float magneticStrength, float pendulumLength, float pendulumHeight,
+                           int resX, int resY)
     {
         bool fss = FssMode;
 
@@ -151,7 +154,9 @@ public class PynqConnection : MonoBehaviour
             magneticStrength == lastSentMagneticStrength &&
             pendulumLength == lastSentPendulumLength &&
             pendulumHeight == lastSentPendulumHeight &&
-            fss == lastSentFss)
+            fss == lastSentFss &&
+            resX == lastSentResX &&
+            resY == lastSentResY)
             return;
 
         lock (outboundLock)
@@ -161,7 +166,9 @@ public class PynqConnection : MonoBehaviour
                 magneticStrength == pendingMagneticStrength &&
                 pendulumLength == pendingPendulumLength &&
                 pendulumHeight == pendingPendulumHeight &&
-                fss == pendingFss)
+                fss == pendingFss &&
+                resX == pendingResX &&
+                resY == pendingResY)
                 return;
         }
 
@@ -175,7 +182,9 @@ public class PynqConnection : MonoBehaviour
             magneticStrength,
             pendulumLength,
             pendulumHeight,
-            fss
+            fss,
+            resX,
+            resY
         });
         byte[] frame = BuildFrame(MSG_PARAMS, Encoding.UTF8.GetBytes(json));
 
@@ -187,6 +196,8 @@ public class PynqConnection : MonoBehaviour
             pendingPendulumLength = pendulumLength;
             pendingPendulumHeight = pendulumHeight;
             pendingFss = fss;
+            pendingResX = resX;
+            pendingResY = resY;
             pendingParamVersion = paramVersion;
             pendingMinAcceptedImageVersion = minImageVersion;
         }
@@ -255,6 +266,8 @@ public class PynqConnection : MonoBehaviour
                         lastSentPendulumLength = pendingPendulumLength;
                         lastSentPendulumHeight = pendingPendulumHeight;
                         lastSentFss = pendingFss;
+                        lastSentResX = pendingResX;
+                        lastSentResY = pendingResY;
                         hasSentParams = true;
                         LatestSentParamVersion = pendingParamVersion;
                         MinAcceptedImageVersion = pendingMinAcceptedImageVersion;

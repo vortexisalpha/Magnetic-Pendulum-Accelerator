@@ -7,6 +7,8 @@ public class ControlData
     public float magneticStrength;
     public float pendulumLength;
     public float pendulumHeight;
+    public int resX = 120;
+    public int resY = 120;
 }
 
 // Throttled slider → FPGA path via PynqConnection TCP (no Flask).
@@ -18,6 +20,8 @@ public class PynqParamController : MonoBehaviour
     [SerializeField] GameObject magneticStrengthController;
     [SerializeField] GameObject lengthController;
     [SerializeField] GameObject pendulumHeightController;
+    [SerializeField] GameObject resXController;
+    [SerializeField] GameObject resYController;
     [SerializeField] GameObject panZoomController;
 
     [Tooltip("Minimum seconds between PARAMS sends while dragging.")]
@@ -27,6 +31,8 @@ public class PynqParamController : MonoBehaviour
     private SliderTextDisplay magneticSlider;
     private SliderTextDisplay lengthSlider;
     private SliderTextDisplay heightSlider;
+    private ResolutionSlider resXSlider;
+    private ResolutionSlider resYSlider;
     private PanZoom panZoom;
 
     private ControlData data = new ControlData();
@@ -45,6 +51,8 @@ public class PynqParamController : MonoBehaviour
         magneticSlider = magneticStrengthController.GetComponent<SliderTextDisplay>();
         lengthSlider = lengthController.GetComponent<SliderTextDisplay>();
         heightSlider = pendulumHeightController.GetComponent<SliderTextDisplay>();
+        if (resXController != null) resXSlider = resXController.GetComponent<ResolutionSlider>();
+        if (resYController != null) resYSlider = resYController.GetComponent<ResolutionSlider>();
         panZoom = panZoomController.GetComponent<PanZoom>();
 
         nextSendAllowedTime = 0f;
@@ -97,6 +105,8 @@ public class PynqParamController : MonoBehaviour
         data.magneticStrength = magneticSlider.displayValue;
         data.pendulumLength = lengthSlider.displayValue;
         data.pendulumHeight = heightSlider.displayValue;
+        if (resXSlider != null) data.resX = resXSlider.Resolution;
+        if (resYSlider != null) data.resY = resYSlider.Resolution;
     }
 
     private void SendNow()
@@ -112,7 +122,9 @@ public class PynqParamController : MonoBehaviour
                 data.dampingFactor,
                 data.magneticStrength,
                 data.pendulumLength,
-                data.pendulumHeight);
+                data.pendulumHeight,
+                data.resX,
+                data.resY);
             slidersDirty = false;
         }
 
