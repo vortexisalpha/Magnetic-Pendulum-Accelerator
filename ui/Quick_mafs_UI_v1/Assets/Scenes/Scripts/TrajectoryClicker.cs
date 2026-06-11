@@ -17,20 +17,31 @@ public class TrajectoryClicker : MonoBehaviour, IPointerClickHandler
 
     public void OnPointerClick(PointerEventData eventData)
     {
+        Debug.Log($"[Trajectory] image clicked at screen {eventData.position}");
         var conn = PynqConnection.Instance;
         if (conn == null || conn.LatestImage == null)
+        {
+            Debug.LogWarning("[Trajectory] click ignored: connection or LatestImage is null");
             return;
+        }
 
         int width = conn.LatestImage.width;
         int height = conn.LatestImage.height;
         if (width <= 0 || height <= 0)
+        {
+            Debug.LogWarning($"[Trajectory] click ignored: bad image size {width}x{height}");
             return;
+        }
 
         if (!TryGetPixel(eventData, width, height, out int x, out int y))
+        {
+            Debug.LogWarning("[Trajectory] click ignored: click was outside the image rect");
             return;
+        }
 
         //pixel id matches PendulumRenderer's source ordering (row 0 = top)
         uint pixelId = (uint)(y * width + x);
+        Debug.Log($"[Trajectory] requesting trajectory for pixel {pixelId} (x={x}, y={y})");
         conn.SendTrajectoryRequest(pixelId);
     }
 

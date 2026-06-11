@@ -1,3 +1,4 @@
+using System; 
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -28,12 +29,16 @@ public class TrajectoryRenderer : MonoBehaviour
     [SerializeField] private Vector2 closeButtonMargin = new Vector2(6f, 6f);
     [SerializeField] private Color closeButtonColor = new Color(0.1f, 0.1f, 0.1f, 0.85f);
 
+
+    [Header("Playback")]
+    [SerializeField] private Slider trajectorySlider; 
+
     private RectTransform canvasRoot;
     private RawImage overlayImage;
     private RectTransform closeButton;
     private Texture2D overlayTexture;
 
-    private Vector2[] lastPoints;
+    private Vector2[] storedPoints;
     private bool lastImageToggleOn;
 
     void Start()
@@ -64,9 +69,15 @@ public class TrajectoryRenderer : MonoBehaviour
         if (imageToggle != null && imageToggle.isOn != lastImageToggleOn &&
             overlayImage != null && overlayImage.gameObject.activeSelf)
         {
-            DrawTrajectory(lastPoints);
+            //bug #1 fix: guard the slider; fall back to the full trajectory if it's
+            //not assigned, instead of throwing a NullReferenceException every frame
+            int count = trajectorySlider != null
+                ? Mathf.RoundToInt(trajectorySlider.value)
+                : (storedPoints != null ? storedPoints.Length : 0);
+            DrawSlice(count);
         }
     }
+    
 
     private void OnTrajectoryReceived(TrajectoryMessage msg)
     {
@@ -81,35 +92,67 @@ public class TrajectoryRenderer : MonoBehaviour
             return;
         }
 
-        DrawTrajectory(msg.points);
+        storedPoints = msg.points;
+
+        
+        if (storedPoints == null || storedPoints.Length == 0)
+        {
+            Debug.LogWarning("[Trajectory] received 0 points; nothing to draw.");
+            return;
+        }
+
+        if (trajectorySlider != null)
+        {
+            trajectorySlider.onValueChanged.RemoveAllListeners();
+            trajectorySlider.minValue = 0;
+            trajectorySlider.maxValue = storedPoints.Length;
+            trajectorySlider.value = storedPoints.Length;
+            trajectorySlider.onValueChanged.AddListener(OnSliderChanged);
+        }
+
+
+        DrawSlice(storedPoints.Length);
         SetVisible(true);
     }
 
-    private void DrawTrajectory(Vector2[] points)
+    private void OnSliderChanged(float value)
     {
-        lastPoints = points;
+        if(storedPoints == null){ return; }
+        DrawSlice(Mathf.RoundToInt(value)); 
+    }
+
+    private void DrawSlice(int count)
+    {
+        if (storedPoints == null) return; 
+        count = Mathf.Clamp(count, 1, storedPoints.Length);
 
         var view = new TrajectoryTexturePainter.Viewport
         {
-            xMin = -1.8f, xMax = 1.8f, yMin = -1.8f, yMax = 1.8f
+        xMin = -1.8f,
+        yMin = -1.8f,
+        xMax = 1.8f,
+        yMax = 1.8f 
+
         };
-        if (panZoom != null)
-            panZoom.GetViewportBounds(out view.xMin, out view.xMax, out view.yMin, out view.yMax);
 
-        int n = points != null ? points.Length : 0;
-        if (n > 0)
-            Debug.Log($"[Trajectory] {n} pts, first={points[0]}, last={points[n - 1]}, " +
-                      $"view x[{view.xMin:F2},{view.xMax:F2}] y[{view.yMin:F2},{view.yMax:F2}]");
-        else
-            Debug.LogWarning("[Trajectory] received 0 points");
+        if( panZoom != null) 
+        panZoom.GetViewportBounds(out view.xMin, out view.xMax, out view.yMin, out view.yMax);
 
-        //start->end gradient; collapses to a white line when the image toggle is off
+        if (count > 0)
+            Debug.Log($"[Trajectory] drawing {count}/{storedPoints.Length} pts, " +
+                    $"first={storedPoints[0]}, last={storedPoints[count - 1]}, " +
+                    $"view x[{view.xMin:F2},{view.xMax:F2}] y[{view.yMin:F2},{view.yMax:F2}]");
+
         lastImageToggleOn = imageToggle == null || imageToggle.isOn;
         Color start = lastImageToggleOn ? startColor : Color.white;
-        Color end = lastImageToggleOn ? endColor : Color.white;
+        Color end   = lastImageToggleOn ? endColor   : Color.white;
 
-        TrajectoryTexturePainter.Paint(overlayTexture, points, view, start, end, lineThickness);
+        var slice = new Vector2[count];
+        Array.Copy(storedPoints, slice, count);
+
+        TrajectoryTexturePainter.Paint(overlayTexture, slice, view, start, end, lineThickness);
         AlignOverlay();
+
     }
 
     private void SetVisible(bool visible)
