@@ -77,6 +77,46 @@ def annotate_mapped_mags_pos(frame: np.ndarray, detected_mags_pos: list, mapped_
             detected_pos_np = np.array(detected_pos, dtype=np.float32)
             cv2.putText(frame, f"ID {i+4}: {str(mapped_mags_pos[i])}", np.round(detected_pos_np).astype(int), _TEXT_FONT, 4, (0, 255, 0), thickness = 2)
 
+# Functional Decomp
+def find_marker_centres(corners: list, marker_ids: np.ndarray)-> dict[int, tuple[float, float]]:
+    centers = {}
+    for marker_id, single_marker_corners in zip(marker_ids, corners):
+        x0, y0 = single_marker_corners[0][0]
+        x1, y1 = single_marker_corners[0][1]
+        x2, y2 = single_marker_corners[0][2]
+        x3, y3 = single_marker_corners[0][3]
+
+        # Finds centers by calculating diagonal intersection
+        # If both diagonals are vertical (unlikely)
+        if abs(x0-x2) < 1e-6 and abs(x1-x3) < 1e-6:
+           continue ## We don't do anything? What do we feed into the pos_transform?
+        # If only diagonal joining (x0, y0) and (x2, y2) is vertical
+        elif abs(x0-x2) < 1e-6:
+            x_center = x0
+            m2 = (y3-y1)/(x3-x1)
+            y_center = m2*(x0-x1)+y1
+        # If only diagonal joining (x1, y1) and (x3, y3) is vertical
+        elif abs(x1-x3) < 1e-6:
+            x_center = x1
+            m1 = (y2-y0)/(x2-x0)
+            y_center = m1*(x1-x0)+y0
+        else:
+            m1 = (y2-y0)/(x2-x0)
+            m2 = (y3-y1)/(x3-x1)
+
+        # if the diagonals appear to be parallel
+        if abs(m1 - m2) < 1e-6:
+            continue
+
+        x_center = ((y1-y0)+x0*m1-x1*m2)/(m1-m2)
+        y_center = m1*(x_center-x0)+y0
+        
+        m_id = marker_id[0]
+        centers[m_id] = (x_center, y_center)
+        return centers
+
+    
+
 
 # Need to decompose! Also, implicitly mutating frame while also returning a new warped frame seems unconventional
 def detect_markers(frame: np.ndarray, detector: cv2.aruco.ArucoDetector) -> np.ndarray | None:

@@ -1633,6 +1633,7 @@ MonoBehaviour:
   mainCanvas: {fileID: 1862792688}
   canvas3DOverlay: {fileID: 1809429736}
   orbitCamera: {fileID: 961739754}
+  panZoomController: {fileID: 1151704948}
 --- !u!4 &1550765096
 Transform:
   m_ObjectHideFlags: 0
