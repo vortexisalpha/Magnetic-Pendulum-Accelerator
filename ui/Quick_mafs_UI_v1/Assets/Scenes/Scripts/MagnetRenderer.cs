@@ -45,17 +45,22 @@ public class MagnetRenderer : MonoBehaviour
         StopAllCoroutines();
     }
 
+    private float oldMagnetSendTime = -1f;
+    private float newMagnetSendTime;
+    private float oldRenderTime = -1f;
+    private float newRenderTime;
+
     IEnumerator PollLoop()
     {
         var wait = new WaitForSeconds(pollIntervalSeconds);
         while (true)
         {
-            yield return FetchInfo();
+            yield return FetchAndSendInfo();
             yield return wait;
         }
     }
 
-    IEnumerator FetchInfo()
+    IEnumerator FetchAndSendInfo()
     {
         using (var req = UnityWebRequest.Get(flaskURL + "info"))
         {
@@ -65,12 +70,27 @@ public class MagnetRenderer : MonoBehaviour
             var info = JsonConvert.DeserializeObject<InfoMessage>(req.downloadHandler.text);
             if (info == null || info.magnets == null) yield break;
 
+
             ApplyInfo(info);
+            newRenderTime = Time.time;
+            if (oldRenderTime > 0f)
+            {
+                Debug.Log($"Time between magnet position renders: {newRenderTime - oldRenderTime}");
+            }
+            oldRenderTime = newRenderTime;
 
             // Relay the same magnet positions to the board over TCP so the FPGA
             // basin is computed from what we display.
             if (PynqConnection.Instance != null)
+            {
                 PynqConnection.Instance.SendMagnets(info.magnets);
+                newMagnetSendTime = Time.time;
+                if (oldMagnetSendTime > 0f)
+                {
+                    Debug.Log($"Time between magnet position TCP sends: {newMagnetSendTime - oldMagnetSendTime}");
+                }
+                oldMagnetSendTime = newMagnetSendTime;
+            }
         }
     }
 
