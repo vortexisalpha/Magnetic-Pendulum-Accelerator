@@ -6,7 +6,7 @@ module one_lane_top #(
     parameter LUT_SIZE = 4096,
     parameter LUT_ADDR_W = 12,
     parameter Q_WIDTH = 18,
-    parameter IMG_W = 2048,
+    parameter IMG_W = 2048,      // must be a power of two (raster id = row<<log2(IMG_W) | col)
     parameter IMG_H = 1080,
     parameter LANE_ID   = 0,     // 0..NUM_LANES-1
     parameter NUM_LANES = 12,
@@ -252,16 +252,16 @@ module one_lane_top #(
     logic [3:0] step_category;
     always_comb begin
         if (timeout_w)             step_category = 4'd0;
-        else if (out_step_cnt <= 500)  step_category = 4'd1;
-        else if (out_step_cnt <= 1000) step_category = 4'd2;
-        else if (out_step_cnt <= 1500) step_category = 4'd3;
-        else if (out_step_cnt <= 2000) step_category = 4'd4;
-        else if (out_step_cnt <= 2500) step_category = 4'd5;
-        else if (out_step_cnt <= 3000) step_category = 4'd6;
-        else if (out_step_cnt <= 3500) step_category = 4'd7;
-        else if (out_step_cnt <= 4000) step_category = 4'd8;
-        else if (out_step_cnt <= 4500) step_category = 4'd9;
-        else if (out_step_cnt <= 5000) step_category = 4'd10;
+        else if (out_step_cnt <= 400)  step_category = 4'd1;
+        else if (out_step_cnt <= 800) step_category = 4'd2;
+        else if (out_step_cnt <= 1200) step_category = 4'd3;
+        else if (out_step_cnt <= 1600) step_category = 4'd4;
+        else if (out_step_cnt <= 2000) step_category = 4'd5;
+        else if (out_step_cnt <= 2400) step_category = 4'd6;
+        else if (out_step_cnt <= 2800) step_category = 4'd7;
+        else if (out_step_cnt <= 3200) step_category = 4'd8;
+        else if (out_step_cnt <= 3600) step_category = 4'd9;
+        else if (out_step_cnt <= 4000) step_category = 4'd10;
         else                           step_category = 4'd11;
     end
 
