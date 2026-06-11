@@ -1,13 +1,11 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 public class PanZoom : MonoBehaviour
 {
-    // Simulation window coord center and size, used to check if user window is still within Simulation Window
-    // Simulation window is centered at 0, so implicitly simCenter = 0f
     private const float simHalfSize = 1.8f;
 
-    // Center and halfSize of the window the user is setting
     private Vector2 center = Vector2.zero;
     private float halfSize = 1.8f;
 
@@ -15,15 +13,16 @@ public class PanZoom : MonoBehaviour
     private float lastReportedHalfSize = 1.8f;
     private const float viewportSendEpsilon = 0.0001f;
 
-    // Panning variables
     private Vector2 deltaMouse = Vector2.zero;
-    // deltaMouse returns the number of pixels the cursor has moved across, scale it down
     [SerializeField] private float panningSensitivity = 0.01f;
+    [SerializeField] private float zoomCommitDelay = 0.35f;
 
-    // Zooming variables
     private float zoomFactor = 0.9f;
     private float maxHalfSize = 1.8f;
-    [SerializeField] private float minHalfSize = 0.01f; // Trial and error to determine when zooming in becomes too blocky
+    [SerializeField] private float minHalfSize = 0.01f;
+
+    private bool viewportPending;
+    private Coroutine zoomCommitRoutine;
 
     void Update()
     {
@@ -35,10 +34,13 @@ public class PanZoom : MonoBehaviour
 
         if (centerChanged || sizeChanged)
         {
-            PynqParamController.NotifyViewportChanged();
+            viewportPending = true;
             lastReportedCenter = center;
             lastReportedHalfSize = halfSize;
         }
+
+        if (viewportPending && Mouse.current != null && Mouse.current.leftButton.wasReleasedThisFrame)
+            CommitViewport();
     }
 
     public void GetViewportBounds(out float xMin, out float xMax, out float yMin, out float yMax)
@@ -49,21 +51,17 @@ public class PanZoom : MonoBehaviour
         yMax = center.y + halfSize;
     }
 
-
     void OnZoom(InputValue input)
     {
         float scroll = input.Get<Vector2>().y;
         float candidateHalfSize = halfSize;
-        // We ignore when scroll == 0, halfSize doesn't change
         if (scroll > 0)
         {
-            //Debug.Log("New Input: Zooming in...");
             candidateHalfSize *= zoomFactor;
             candidateHalfSize = Mathf.Max(candidateHalfSize, minHalfSize);
         }
         else if (scroll < 0)
         {
-            //Debug.Log("New Input: Zooming out...");
             candidateHalfSize /= zoomFactor;
             candidateHalfSize = Mathf.Min(candidateHalfSize, maxHalfSize);
         }
@@ -71,27 +69,49 @@ public class PanZoom : MonoBehaviour
         if (!Violate(center, candidateHalfSize))
         {
             halfSize = candidateHalfSize;
+            viewportPending = true;
+            lastReportedCenter = center;
+            lastReportedHalfSize = halfSize;
+            ScheduleZoomCommit();
         }
     }
 
-
     void OnPan(InputValue input)
     {
-        //Debug.Log("Panning detected...");
         deltaMouse = input.Get<Vector2>();
 
         Vector2 candidateCenter = ApplyPan(center, deltaMouse);
         if (Violate(candidateCenter, halfSize))
-        {
             deltaMouse = Vector2.zero;
-        }
+    }
+
+    void ScheduleZoomCommit()
+    {
+        if (zoomCommitRoutine != null)
+            StopCoroutine(zoomCommitRoutine);
+        zoomCommitRoutine = StartCoroutine(CommitViewportAfterDelay());
+    }
+
+    IEnumerator CommitViewportAfterDelay()
+    {
+        yield return new WaitForSeconds(zoomCommitDelay);
+        zoomCommitRoutine = null;
+        CommitViewport();
+    }
+
+    void CommitViewport()
+    {
+        if (!viewportPending)
+            return;
+
+        viewportPending = false;
+        PynqParamController.NotifyViewportReleased();
     }
 
     Vector2 ApplyPan(Vector2 currentCenter, Vector2 currentDeltaMouse)
     {
         return currentCenter - currentDeltaMouse * panningSensitivity;
     }
-
 
     bool Violate(Vector2 currentCenter, float currentHalfSize)
     {

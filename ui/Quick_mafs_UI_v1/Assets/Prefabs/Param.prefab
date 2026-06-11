@@ -294,8 +294,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SliderTextDisplay
   sliderVal: {fileID: 1406470373531864290}
   paramName: {fileID: 8345064502198783170}
-  param_min: 0.1
-  param_max: 0.5
+  paramMin: 0.1
+  paramMax: 0.5
   param: "Damping Factor \u03B3"
 --- !u!1 &3270124035757638676
 GameObject:

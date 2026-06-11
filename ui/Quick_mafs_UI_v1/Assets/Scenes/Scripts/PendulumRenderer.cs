@@ -5,6 +5,8 @@ public class PendulumRenderer : MonoBehaviour
 {
     public static int LastFetchedVersion { get; private set; }
 
+    public static void ResetFetchedVersion() => LastFetchedVersion = 0;
+
     [SerializeField] private RawImage categoryImage;
     [SerializeField] private RawImage valueImage;
 

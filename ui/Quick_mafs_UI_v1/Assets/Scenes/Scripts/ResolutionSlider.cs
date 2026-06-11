@@ -13,52 +13,70 @@ public class ResolutionSlider : MonoBehaviour
     [SerializeField] private Slider slider = null;
     [SerializeField] private string param = "Resolution";
 
+    public string ParamLabel => param;
+
     [Tooltip("Resolution increment; values are multiples of this, excluding 0.")]
     [SerializeField] private int step = 12;
     [Tooltip("Smallest multiplier (>=1 so 0 is excluded).")]
     [SerializeField] private int minSteps = 1;
-    [SerializeField] private int maxSteps = 30;
+    [SerializeField] private int maxSteps = 50;
     [SerializeField] private int defaultSteps = 10;
 
     public int Resolution { get; private set; }
 
+    void Awake()
+    {
+        Resolution = Mathf.Clamp(defaultSteps, Mathf.Max(1, minSteps), maxSteps) * step;
+
+        // Param prefab ships with SliderTextDisplay on ParamControl; disable it so
+        // it doesn't reset the slider or overwrite SliderVal on Start.
+        foreach (var legacy in GetComponentsInChildren<SliderTextDisplay>(true))
+            legacy.enabled = false;
+    }
+
     void Start()
     {
         if (paramName != null) paramName.text = param;
-        if (slider == null) slider = GetComponentInParent<Slider>();
+        if (slider == null) slider = GetComponent<Slider>();
 
         if (slider != null)
         {
-            //force discrete, integer step-count values on the slider itself
             slider.wholeNumbers = true;
             slider.minValue = Mathf.Max(1, minSteps);
             slider.maxValue = Mathf.Max(slider.minValue, maxSteps);
+            slider.onValueChanged.RemoveAllListeners();
+            slider.onValueChanged.AddListener(valChange);
             slider.SetValueWithoutNotify(Mathf.Clamp(defaultSteps, (int)slider.minValue, (int)slider.maxValue));
             BindSliderRelease(slider.gameObject);
         }
 
-        valChange(slider != null ? slider.value : defaultSteps);
+        UpdateResolution(slider != null ? slider.value : defaultSteps);
     }
 
-    static void BindSliderRelease(GameObject sliderObject)
+    void BindSliderRelease(GameObject sliderObject)
     {
         var trigger = sliderObject.GetComponent<EventTrigger>();
         if (trigger == null)
             trigger = sliderObject.AddComponent<EventTrigger>();
 
         var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerUp };
-        entry.callback.AddListener(_ => PynqParamController.NotifySliderReleased());
+        entry.callback.AddListener(_ => OnPointerUp());
         trigger.triggers.Add(entry);
     }
 
-    //hook to the Slider's On Value Changed (Single)
-    public void valChange(float value)
+    void OnPointerUp()
+    {
+        SliderToImageTimer.OnSliderChanged();
+        PynqParamController.NotifySliderReleased();
+    }
+
+    // Hook to the Slider's On Value Changed (Single) — UI only; TCP send happens in OnPointerUp.
+    public void valChange(float value) => UpdateResolution(value);
+
+    void UpdateResolution(float value)
     {
         int steps = Mathf.Clamp(Mathf.RoundToInt(value), Mathf.Max(1, minSteps), maxSteps);
         Resolution = steps * step;
-
         if (sliderVal != null) sliderVal.text = Resolution.ToString();
-        SliderToImageTimer.OnSliderChanged();
-        PynqParamController.NotifySliderChanged();
     }
 }

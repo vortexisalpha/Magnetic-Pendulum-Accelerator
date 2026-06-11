@@ -11,11 +11,23 @@ public class SliderTextDisplay : MonoBehaviour
     [SerializeField] private float paramMin, paramMax;
     [SerializeField] private string param;
 
+    public string ParamLabel => param;
     public float displayValue { get; private set; }
+
+    public float GetCurrentValue()
+    {
+        if (slider == null)
+            slider = GetComponentInParent<Slider>();
+
+        if (slider != null)
+            return Mathf.Round((paramMin + (paramMax - paramMin) * slider.value) * 100f) / 100f;
+
+        return displayValue;
+    }
 
     void Start()
     {
-        paramName.text = param;
+        if (paramName != null) paramName.text = param;
 
         if (slider == null)
             slider = GetComponentInParent<Slider>();
@@ -36,15 +48,19 @@ public class SliderTextDisplay : MonoBehaviour
             trigger = sliderObject.AddComponent<EventTrigger>();
 
         var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerUp };
-        entry.callback.AddListener(_ => PynqParamController.NotifySliderReleased());
+        entry.callback.AddListener(_ =>
+        {
+            SliderToImageTimer.OnSliderChanged();
+            PynqParamController.NotifySliderReleased();
+        });
         trigger.triggers.Add(entry);
     }
 
-    public void valChange(float value)
+    public void valChange(float value) => UpdateDisplay(value);
+
+    void UpdateDisplay(float value)
     {
         displayValue = Mathf.Round((paramMin + (paramMax - paramMin) * value) * 100f) / 100f;
-        sliderVal.text = displayValue.ToString("0.00");
-        SliderToImageTimer.OnSliderChanged();
-        PynqParamController.NotifySliderChanged();
+        if (sliderVal != null) sliderVal.text = displayValue.ToString("0.00");
     }
 }

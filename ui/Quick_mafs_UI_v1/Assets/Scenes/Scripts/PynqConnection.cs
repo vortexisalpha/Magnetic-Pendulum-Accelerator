@@ -76,6 +76,8 @@ public class PynqConnection : MonoBehaviour
 
     public int MinAcceptedImageVersion { get; private set; }
 
+    public event Action Connected;
+
     //threading
     private Thread ioThread;
     private volatile bool running;
@@ -86,19 +88,13 @@ public class PynqConnection : MonoBehaviour
     private readonly object writeLock = new object();
 
     private readonly ConcurrentQueue<object> inbound = new ConcurrentQueue<object>();
-    private readonly ConcurrentQueue<byte[]> outbound = new ConcurrentQueue<byte[]>();
-    private byte[] pendingParamsFrame;
-    private float pendingDampingFactor, pendingMagneticStrength, pendingPendulumLength, pendingPendulumHeight;
-    private bool pendingFss;
-    private int pendingResX, pendingResY;
-    private int pendingParamVersion;
-    private int pendingMinAcceptedImageVersion;
-    private readonly object outboundLock = new object();
 
     private float lastSentDampingFactor, lastSentMagneticStrength, lastSentPendulumLength, lastSentPendulumHeight;
     private bool lastSentFss;
     private int lastSentResX, lastSentResY;
+    private int renderRequestId;
     private bool hasSentParams;
+    private volatile bool notifyConnected;
 
     void Awake()
     {
@@ -116,6 +112,14 @@ public class PynqConnection : MonoBehaviour
 
     void Update()
     {
+        if (notifyConnected)
+        {
+            notifyConnected = false;
+            MinAcceptedImageVersion = 0;
+            PendulumRenderer.ResetFetchedVersion();
+            Connected?.Invoke();
+        }
+
         while (inbound.TryDequeue(out object msg))
         {
             switch (msg)
@@ -149,6 +153,10 @@ public class PynqConnection : MonoBehaviour
     {
         bool fss = FssMode;
 
+        const int minResolution = 12;
+        if (resX < minResolution) resX = minResolution;
+        if (resY < minResolution) resY = minResolution;
+
         if (hasSentParams &&
             dampingFactor == lastSentDampingFactor &&
             magneticStrength == lastSentMagneticStrength &&
@@ -159,25 +167,14 @@ public class PynqConnection : MonoBehaviour
             resY == lastSentResY)
             return;
 
-        lock (outboundLock)
-        {
-            if (pendingParamsFrame != null &&
-                dampingFactor == pendingDampingFactor &&
-                magneticStrength == pendingMagneticStrength &&
-                pendulumLength == pendingPendulumLength &&
-                pendulumHeight == pendingPendulumHeight &&
-                fss == pendingFss &&
-                resX == pendingResX &&
-                resY == pendingResY)
-                return;
-        }
-
         int paramVersion = LatestSentParamVersion + 1;
         int minImageVersion = PendulumRenderer.LastFetchedVersion;
+        int requestId = ++renderRequestId;
 
         string json = JsonConvert.SerializeObject(new
         {
             version = paramVersion,
+            requestId,
             dampingFactor,
             magneticStrength,
             pendulumLength,
@@ -187,29 +184,28 @@ public class PynqConnection : MonoBehaviour
             resY
         });
         byte[] frame = BuildFrame(MSG_PARAMS, Encoding.UTF8.GetBytes(json));
+        Debug.Log($"[Pynq] send PARAMS v{paramVersion} req={requestId}: {json}");
 
-        lock (outboundLock)
-        {
-            pendingParamsFrame = frame;
-            pendingDampingFactor = dampingFactor;
-            pendingMagneticStrength = magneticStrength;
-            pendingPendulumLength = pendulumLength;
-            pendingPendulumHeight = pendulumHeight;
-            pendingFss = fss;
-            pendingResX = resX;
-            pendingResY = resY;
-            pendingParamVersion = paramVersion;
-            pendingMinAcceptedImageVersion = minImageVersion;
-        }
+        if (!WriteFrame(frame))
+            return;
 
-        FlushOutbound();
+        lastSentDampingFactor = dampingFactor;
+        lastSentMagneticStrength = magneticStrength;
+        lastSentPendulumLength = pendulumLength;
+        lastSentPendulumHeight = pendulumHeight;
+        lastSentFss = fss;
+        lastSentResX = resX;
+        lastSentResY = resY;
+        hasSentParams = true;
+        LatestSentParamVersion = paramVersion;
+        MinAcceptedImageVersion = minImageVersion;
     }
 
     public void SendMagnets(Dictionary<string, MagnetCoords> magnets)
     {
         if (magnets == null) return;
         string json = JsonConvert.SerializeObject(new { magnets });
-        SendJson(MSG_MAGNETS, json);
+        WriteFrame(BuildFrame(MSG_MAGNETS, Encoding.UTF8.GetBytes(json)));
     }
 
     public void SendViewport(float xMin, float xMax, float yMin, float yMax)
@@ -222,7 +218,7 @@ public class PynqConnection : MonoBehaviour
             y_min = yMin,
             y_max = yMax
         });
-        SendJson(MSG_VIEWPORT, json);
+        WriteFrame(BuildFrame(MSG_VIEWPORT, Encoding.UTF8.GetBytes(json)));
     }
 
     //0x04 TRAJ_REQ: ask the board for the trajectory starting at the chosen pixel
@@ -232,7 +228,7 @@ public class PynqConnection : MonoBehaviour
         HasRequestedTrajectory = true;
         pendingTrajectoryRequests.Add(pixelId);
         string json = JsonConvert.SerializeObject(new { pixel_id = pixelId });
-        SendJson(MSG_TRAJ_REQ, json);
+        WriteFrame(BuildFrame(MSG_TRAJ_REQ, Encoding.UTF8.GetBytes(json)));
     }
 
     //true if pixelId was actually requested; clears it from the pending set so we
@@ -242,46 +238,21 @@ public class PynqConnection : MonoBehaviour
         return pendingTrajectoryRequests.Remove(pixelId);
     }
 
-    private void SendJson(byte type, string json)
+    private bool WriteFrame(byte[] frame)
     {
-        outbound.Enqueue(BuildFrame(type, Encoding.UTF8.GetBytes(json)));
-        FlushOutbound();
-    }
-
-    private void FlushOutbound()
-    {
-        if (!connected) return;
+        if (!connected)
+            return false;
 
         try
         {
             lock (writeLock)
-            {
-                lock (outboundLock)
-                {
-                    if (pendingParamsFrame != null)
-                    {
-                        stream.Write(pendingParamsFrame, 0, pendingParamsFrame.Length);
-                        lastSentDampingFactor = pendingDampingFactor;
-                        lastSentMagneticStrength = pendingMagneticStrength;
-                        lastSentPendulumLength = pendingPendulumLength;
-                        lastSentPendulumHeight = pendingPendulumHeight;
-                        lastSentFss = pendingFss;
-                        lastSentResX = pendingResX;
-                        lastSentResY = pendingResY;
-                        hasSentParams = true;
-                        LatestSentParamVersion = pendingParamVersion;
-                        MinAcceptedImageVersion = pendingMinAcceptedImageVersion;
-                        pendingParamsFrame = null;
-                    }
-                }
-
-                while (outbound.TryDequeue(out byte[] frame))
-                    stream.Write(frame, 0, frame.Length);
-            }
+                stream.Write(frame, 0, frame.Length);
+            return true;
         }
         catch (Exception e)
         {
             Debug.LogWarning($"[Pynq] send failed: {e.Message}");
+            return false;
         }
     }
 
@@ -306,7 +277,7 @@ public class PynqConnection : MonoBehaviour
                 stream = client.GetStream();
                 connected = true;
                 Debug.Log($"[Pynq] connected to {host}:{port}");
-                FlushOutbound();
+                notifyConnected = true;
 
                 ReadFrames();
             }
@@ -318,9 +289,6 @@ public class PynqConnection : MonoBehaviour
             {
                 connected = false;
                 hasSentParams = false;
-                lock (outboundLock)
-                    pendingParamsFrame = null;
-                while (outbound.TryDequeue(out _)) { }
                 try { stream?.Close(); } catch { }
                 try { client?.Close(); } catch { }
             }
