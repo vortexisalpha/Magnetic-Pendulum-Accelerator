@@ -75,7 +75,7 @@ public class MagnetRenderer : MonoBehaviour
             newRenderTime = Time.time;
             if (oldRenderTime > 0f)
             {
-                //Debug.Log($"Time between magnet position renders: {newRenderTime - oldRenderTime}");
+                Debug.Log($"Time between magnet position renders: {newRenderTime - oldRenderTime}");
             }
             oldRenderTime = newRenderTime;
 
@@ -87,7 +87,7 @@ public class MagnetRenderer : MonoBehaviour
                 newMagnetSendTime = Time.time;
                 if (oldMagnetSendTime > 0f)
                 {
-                    //Debug.Log($"Time between magnet position TCP sends: {newMagnetSendTime - oldMagnetSendTime}");
+                    Debug.Log($"Time between magnet position TCP sends: {newMagnetSendTime - oldMagnetSendTime}");
                 }
                 oldMagnetSendTime = newMagnetSendTime;
             }

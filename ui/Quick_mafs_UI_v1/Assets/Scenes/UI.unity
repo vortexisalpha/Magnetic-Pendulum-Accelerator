@@ -3418,7 +3418,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f7c9e2175ad1b4542ba63b476f09d510, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PynqConnection
-  host: 192.168.2.99
+  host: 192.168.137.62
   port: 12345
   reconnectInterval: 2
 --- !u!4 &1930109278
