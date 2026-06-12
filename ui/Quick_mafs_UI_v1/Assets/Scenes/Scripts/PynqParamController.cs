@@ -15,8 +15,6 @@ public class ControlData
     public int resY = 120;
 }
 
-// Slider/viewport → FPGA path via PynqConnection TCP. Renders are committed on
-// mouse-up (or explicit confirm), never while dragging.
 public class PynqParamController : MonoBehaviour
 {
     public const int HighResThreshold = 360;
@@ -60,6 +58,18 @@ public class PynqParamController : MonoBehaviour
     private int previewVersionFloor;
     private Coroutine previewTimeoutRoutine;
     private readonly HashSet<Slider> previewBoundSliders = new HashSet<Slider>();
+
+    //live snapshot of the current slider values, used by views (e.g. the potential
+    //surface) that need the same parameters without going through the FPGA
+    public static ControlData CurrentData
+    {
+        get
+        {
+            if (instance == null) return new ControlData();
+            instance.SnapshotSliders();
+            return CopyData(instance.data);
+        }
+    }
 
     void Awake()
     {
