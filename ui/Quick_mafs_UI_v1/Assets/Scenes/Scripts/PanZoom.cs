@@ -53,6 +53,9 @@ public class PanZoom : MonoBehaviour
 
     void OnZoom(InputValue input)
     {
+        if (MagnetPendulumPreview.IsPointerOverPreview)
+            return;
+
         float scroll = input.Get<Vector2>().y;
         float candidateHalfSize = halfSize;
         if (scroll > 0)
@@ -78,6 +81,9 @@ public class PanZoom : MonoBehaviour
 
     void OnPan(InputValue input)
     {
+        if (MagnetPendulumPreview.IsPointerOverPreview || MagnetPendulumPreview.IsPointerControllingPreview)
+            return;
+
         deltaMouse = input.Get<Vector2>();
 
         Vector2 candidateCenter = ApplyPan(center, deltaMouse);

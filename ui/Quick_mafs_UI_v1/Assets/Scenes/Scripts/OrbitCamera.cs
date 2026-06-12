@@ -23,6 +23,9 @@ public class OrbitCamera : MonoBehaviour
 
     void Update()
     {
+        if (MagnetPendulumPreview.IsPointerOverPreview || MagnetPendulumPreview.IsPointerControllingPreview)
+            return;
+
         //left drag = orbit
         if (Input.GetMouseButton(0))
         {
