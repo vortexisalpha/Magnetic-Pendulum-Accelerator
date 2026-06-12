@@ -23,6 +23,7 @@ public class ResolutionSlider : MonoBehaviour
     [SerializeField] private int defaultSteps = 10;
 
     public int Resolution { get; private set; }
+    private bool initialized;
 
     void Awake()
     {
@@ -52,6 +53,7 @@ public class ResolutionSlider : MonoBehaviour
         }
 
         UpdateResolution(slider != null ? slider.value : defaultSteps);
+        initialized = true;
     }
 
     void ResolveRefs()
@@ -122,7 +124,6 @@ public class ResolutionSlider : MonoBehaviour
 
     void OnPointerUp()
     {
-        SliderToImageTimer.OnSliderChanged();
         PynqParamController.NotifySliderReleased();
     }
 
@@ -138,5 +139,8 @@ public class ResolutionSlider : MonoBehaviour
             sliderVal.text = valueText;
         else if (paramName != null)
             paramName.text = $"{param}\n{valueText}";
+
+        if (initialized)
+            PynqParamController.NotifySliderChanged();
     }
 }

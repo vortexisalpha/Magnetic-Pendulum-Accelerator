@@ -195,7 +195,7 @@ public class PynqConnection : MonoBehaviour
     }
 
 
-    public void SendParams(float dampingFactor, float magneticStrength, float pendulumLength, float pendulumHeight, int resX, int resY)
+    public void SendParams(float dampingFactor, float magneticStrength, float pendulumLength, float pendulumHeight, int resX, int resY, bool force = false)
     {
         bool fss = FssMode;
 
@@ -203,7 +203,8 @@ public class PynqConnection : MonoBehaviour
         if (resX < minResolution) resX = minResolution;
         if (resY < minResolution) resY = minResolution;
 
-        if (hasSentParams &&
+        if (!force &&
+            hasSentParams &&
             dampingFactor == lastSentDampingFactor &&
             magneticStrength == lastSentMagneticStrength &&
             pendulumLength == lastSentPendulumLength &&

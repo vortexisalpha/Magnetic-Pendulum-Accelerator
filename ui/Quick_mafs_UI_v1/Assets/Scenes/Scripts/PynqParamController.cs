@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 [System.Serializable]
 public class ControlData
@@ -18,6 +20,10 @@ public class ControlData
 public class PynqParamController : MonoBehaviour
 {
     public const int HighResThreshold = 360;
+    private const int PreviewMaxResolution = 120;
+    private const int ResolutionStep = 12;
+    private const int PreviewHeightStep = 60;
+    private const float PreviewTimeoutSeconds = 0.35f;
 
     public static event Action<bool, int, int, bool> HighResGateChanged;
     public static bool IsHighResGateActive { get; private set; }
@@ -49,6 +55,11 @@ public class PynqParamController : MonoBehaviour
     private bool syncScheduled;
     private bool slidersResolved;
     private bool bypassHighResGate;
+    private bool previewInFlight;
+    private bool previewPending;
+    private int previewVersionFloor;
+    private Coroutine previewTimeoutRoutine;
+    private readonly HashSet<Slider> previewBoundSliders = new HashSet<Slider>();
 
     void Awake()
     {
@@ -63,7 +74,10 @@ public class PynqParamController : MonoBehaviour
             gameObject.AddComponent<HighResRenderGate>();
 
         if (PynqConnection.Instance != null)
+        {
             PynqConnection.Instance.Connected += OnPynqConnected;
+            PynqConnection.Instance.ImageReceived += OnImageReceived;
+        }
 
         ScheduleFullSync();
     }
@@ -71,7 +85,10 @@ public class PynqParamController : MonoBehaviour
     void OnDestroy()
     {
         if (PynqConnection.Instance != null)
+        {
             PynqConnection.Instance.Connected -= OnPynqConnected;
+            PynqConnection.Instance.ImageReceived -= OnImageReceived;
+        }
         if (instance == this) instance = null;
     }
 
@@ -98,6 +115,10 @@ public class PynqParamController : MonoBehaviour
         magneticSlider = FindSliderDisplay(magneticStrengthController) ?? FindSliderByLabel("Magnetic");
         lengthSlider = FindSliderDisplay(lengthController) ?? FindSliderByLabel("Length");
         heightSlider = FindSliderDisplay(pendulumHeightController) ?? FindSliderByLabel("Height");
+        BindPreviewSlider(dampingSlider);
+        BindPreviewSlider(magneticSlider);
+        BindPreviewSlider(lengthSlider);
+        BindPreviewSlider(heightSlider);
 
         if (resXController != null)
             resXSlider = FindResolutionSlider(resXController) ?? FindResolutionByLabel("Res X");
@@ -120,6 +141,22 @@ public class PynqParamController : MonoBehaviour
         return controller.GetComponent<SliderTextDisplay>()
             ?? controller.GetComponentInChildren<SliderTextDisplay>(true)
             ?? controller.GetComponentInParent<SliderTextDisplay>(true);
+    }
+
+    void BindPreviewSlider(SliderTextDisplay display)
+    {
+        if (display == null)
+            return;
+
+        Slider slider = display.GetComponent<Slider>()
+            ?? display.GetComponentInChildren<Slider>(true)
+            ?? display.GetComponentInParent<Slider>();
+
+        if (slider == null || previewBoundSliders.Contains(slider))
+            return;
+
+        slider.onValueChanged.AddListener(_ => NotifySliderChanged());
+        previewBoundSliders.Add(slider);
     }
 
     static ResolutionSlider FindResolutionSlider(GameObject controller)
@@ -185,16 +222,38 @@ public class PynqParamController : MonoBehaviour
     {
         if (instance == null) return;
         if (!instance.slidersResolved) instance.ResolveSliders();
+        SliderToImageTimer.OnSliderChanged();
+        instance.previewInFlight = false;
+        instance.previewPending = false;
+        instance.StopPreviewTimeout();
         instance.slidersDirty = true;
         instance.viewportDirty = true;
         instance.SendNow();
     }
 
+    public static void NotifySliderChanged()
+    {
+        if (instance == null || PynqConnection.Instance == null) return;
+        if (!instance.slidersResolved) instance.ResolveSliders();
+        instance.SendPreviewWhileDragging();
+    }
+
     public static void NotifyViewportReleased()
     {
         if (instance == null) return;
+        if (!instance.slidersResolved) instance.ResolveSliders();
+        instance.previewInFlight = false;
+        instance.previewPending = false;
+        instance.slidersDirty = true;
         instance.viewportDirty = true;
         instance.SendNow();
+    }
+
+    public static void NotifyViewportChanged()
+    {
+        if (instance == null || PynqConnection.Instance == null) return;
+        if (!instance.slidersResolved) instance.ResolveSliders();
+        instance.SendPreviewWhileDragging();
     }
 
     public static void NotifyFssChanged()
@@ -238,14 +297,7 @@ public class PynqParamController : MonoBehaviour
 
         if (slidersDirty)
         {
-            Debug.Log($"[ParamManager] send γ={data.dampingFactor} μ={data.magneticStrength} L={data.pendulumLength} h={data.pendulumHeight} res={data.resX}x{data.resY}");
-            PynqConnection.Instance.SendParams(
-                data.dampingFactor,
-                data.magneticStrength,
-                data.pendulumLength,
-                data.pendulumHeight,
-                data.resX,
-                data.resY);
+            SendParams(data, "final", true);
             slidersDirty = false;
         }
 
@@ -259,4 +311,125 @@ public class PynqParamController : MonoBehaviour
             viewportDirty = false;
         }
     }
+
+    void SendPreviewWhileDragging()
+    {
+        if (previewInFlight)
+        {
+            previewPending = true;
+            return;
+        }
+
+        SnapshotSliders();
+        GetPreviewResolution(data.resX, data.resY, out int previewResX, out int previewResY);
+
+        var previewData = CopyData(data);
+        previewData.resX = previewResX;
+        previewData.resY = previewResY;
+
+        SendParams(previewData, "drag-preview");
+        SendViewportIfNeeded(true);
+        previewInFlight = true;
+        previewPending = false;
+        previewVersionFloor = PendulumRenderer.LastFetchedVersion;
+        RestartPreviewTimeout();
+    }
+
+    void OnImageReceived(ImageMessage msg)
+    {
+        if (!previewInFlight || msg.version <= previewVersionFloor)
+            return;
+
+        previewInFlight = false;
+        StopPreviewTimeout();
+
+        if (previewPending)
+            SendPreviewWhileDragging();
+    }
+
+    IEnumerator ClearPreviewInFlightAfterTimeout()
+    {
+        yield return new WaitForSeconds(PreviewTimeoutSeconds);
+        previewTimeoutRoutine = null;
+
+        if (!previewInFlight)
+            yield break;
+
+        previewInFlight = false;
+        if (previewPending)
+            SendPreviewWhileDragging();
+    }
+
+    void RestartPreviewTimeout()
+    {
+        StopPreviewTimeout();
+        previewTimeoutRoutine = StartCoroutine(ClearPreviewInFlightAfterTimeout());
+    }
+
+    void StopPreviewTimeout()
+    {
+        if (previewTimeoutRoutine == null)
+            return;
+
+        StopCoroutine(previewTimeoutRoutine);
+        previewTimeoutRoutine = null;
+    }
+
+    void SendParams(ControlData paramsData, string phase, bool force = false)
+    {
+        Debug.Log($"[ParamManager] send {phase} gamma={paramsData.dampingFactor} mu={paramsData.magneticStrength} L={paramsData.pendulumLength} h={paramsData.pendulumHeight} res={paramsData.resX}x{paramsData.resY}");
+        PynqConnection.Instance.SendParams(
+            paramsData.dampingFactor,
+            paramsData.magneticStrength,
+            paramsData.pendulumLength,
+            paramsData.pendulumHeight,
+            paramsData.resX,
+            paramsData.resY,
+            force);
+    }
+
+    void SendViewportIfNeeded(bool shouldSend)
+    {
+        if (!shouldSend || panZoom == null)
+            return;
+
+        panZoom.GetViewportBounds(out float xMin, out float xMax, out float yMin, out float yMax);
+        PynqConnection.Instance.SendViewport(xMin, xMax, yMin, yMax);
+    }
+
+    static ControlData CopyData(ControlData source)
+    {
+        return new ControlData
+        {
+            dampingFactor = source.dampingFactor,
+            magneticStrength = source.magneticStrength,
+            pendulumLength = source.pendulumLength,
+            pendulumHeight = source.pendulumHeight,
+            resX = source.resX,
+            resY = source.resY,
+        };
+    }
+
+    static void GetPreviewResolution(int finalResX, int finalResY, out int previewResX, out int previewResY)
+    {
+        int maxRes = Mathf.Max(finalResX, finalResY);
+        if (maxRes <= PreviewMaxResolution)
+        {
+            previewResX = finalResX;
+            previewResY = finalResY;
+            return;
+        }
+
+        float scale = PreviewMaxResolution / (float)maxRes;
+        previewResX = RoundToStep(Mathf.Max(ResolutionStep, Mathf.RoundToInt(finalResX * scale)), ResolutionStep);
+        previewResY = RoundToStep(Mathf.Max(PreviewHeightStep, Mathf.RoundToInt(finalResY * scale)), PreviewHeightStep);
+        previewResX = Mathf.Min(previewResX, finalResX);
+        previewResY = Mathf.Min(previewResY, finalResY);
+    }
+
+    static int RoundToStep(int value, int step)
+    {
+        return Mathf.Max(step, Mathf.RoundToInt(value / (float)step) * step);
+    }
+
 }

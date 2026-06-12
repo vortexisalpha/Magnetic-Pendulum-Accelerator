@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Networking;
@@ -11,9 +12,13 @@ public class MagnetRenderer : MonoBehaviour
 {
     [SerializeField] private RawImage miniDisplay;
     [SerializeField] private float pollIntervalSeconds = 0.03f;
+    [SerializeField] private float pynqSendMinIntervalSeconds = 0.15f;
+    [SerializeField] private float pynqSendPositionEpsilon = 0.01f;
     [SerializeField] private string flaskURL = "http://35.179.111.223:5000/";
 
     private MagnetPendulumPreview preview;
+    private readonly Dictionary<string, Vector2> lastSentMagnetPositions = new Dictionary<string, Vector2>();
+    private float lastPynqMagnetSendTime = -1f;
 
     void Start()
     {
@@ -32,11 +37,6 @@ public class MagnetRenderer : MonoBehaviour
     {
         StopAllCoroutines();
     }
-
-    private float oldMagnetSendTime = -1f;
-    private float newMagnetSendTime;
-    private float oldRenderTime = -1f;
-    private float newRenderTime;
 
     IEnumerator PollLoop()
     {
@@ -60,25 +60,11 @@ public class MagnetRenderer : MonoBehaviour
 
 
             ApplyInfo(info);
-            newRenderTime = Time.time;
-            if (oldRenderTime > 0f)
-            {
-                Debug.Log($"Time between magnet position renders: {newRenderTime - oldRenderTime}");
-            }
-            oldRenderTime = newRenderTime;
 
             // Relay the same magnet positions to the board over TCP so the FPGA
             // basin is computed from what we display.
-            if (PynqConnection.Instance != null)
-            {
+            if (PynqConnection.Instance != null && ShouldSendMagnetsToPynq(info.magnets))
                 PynqConnection.Instance.SendMagnets(info.magnets);
-                newMagnetSendTime = Time.time;
-                if (oldMagnetSendTime > 0f)
-                {
-                    Debug.Log($"Time between magnet position TCP sends: {newMagnetSendTime - oldMagnetSendTime}");
-                }
-                oldMagnetSendTime = newMagnetSendTime;
-            }
         }
     }
 
@@ -86,5 +72,39 @@ public class MagnetRenderer : MonoBehaviour
     {
         if (preview != null)
             preview.UpdateMagnets(info.magnets);
+    }
+
+    bool ShouldSendMagnetsToPynq(Dictionary<string, MagnetCoords> magnets)
+    {
+        if (magnets == null)
+            return false;
+
+        bool changed = magnets.Count != lastSentMagnetPositions.Count;
+        float epsilonSqr = pynqSendPositionEpsilon * pynqSendPositionEpsilon;
+
+        foreach (var magnet in magnets)
+        {
+            Vector2 position = new Vector2(magnet.Value.x, magnet.Value.y);
+            if (!lastSentMagnetPositions.TryGetValue(magnet.Key, out Vector2 lastPosition) ||
+                (position - lastPosition).sqrMagnitude > epsilonSqr)
+            {
+                changed = true;
+                break;
+            }
+        }
+
+        if (!changed)
+            return false;
+
+        if (lastPynqMagnetSendTime >= 0f &&
+            Time.time - lastPynqMagnetSendTime < pynqSendMinIntervalSeconds)
+            return false;
+
+        lastSentMagnetPositions.Clear();
+        foreach (var magnet in magnets)
+            lastSentMagnetPositions[magnet.Key] = new Vector2(magnet.Value.x, magnet.Value.y);
+
+        lastPynqMagnetSendTime = Time.time;
+        return true;
     }
 }

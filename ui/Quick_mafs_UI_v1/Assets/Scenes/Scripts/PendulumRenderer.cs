@@ -4,6 +4,7 @@ using UnityEngine.UI;
 public class PendulumRenderer : MonoBehaviour
 {
     public static int LastFetchedVersion { get; private set; }
+    private const int BandHeight = 60;
 
     public static void ResetFetchedVersion() => LastFetchedVersion = 0;
 
@@ -107,41 +108,61 @@ public class PendulumRenderer : MonoBehaviour
 
         int width = msg.width;
         int height = msg.height;
+        int displaySourceHeight = Mathf.Max(BandHeight, (height / BandHeight) * BandHeight);
+        displaySourceHeight = Mathf.Min(displaySourceHeight, height);
+        int displaySize = Mathf.Max(width, height);
 
         if (width != meshW || height != meshH)
             BuildMeshSkeleton(width, height);
 
-        var texCategory = new Texture2D(width, height, TextureFormat.RGBA32, false);
-        var texValue = new Texture2D(width, height, TextureFormat.RGBA32, false);
+        var texCategory = new Texture2D(displaySize, displaySize, TextureFormat.RGBA32, false);
+        var texValue = new Texture2D(displaySize, displaySize, TextureFormat.RGBA32, false);
         texCategory.filterMode = FilterMode.Point;
         texValue.filterMode = FilterMode.Point;
 
-        var catPixels = new Color32[width * height];
-        var valPixels = new Color32[width * height];
+        var catPixels = new Color32[displaySize * displaySize];
+        var valPixels = new Color32[displaySize * displaySize];
         int depthMax = DepthMax(msg.bitDepth);
         float depthScale = DepthToWorldScale(msg.bitDepth, heightScale);
 
         //in fss mode the low bits encode sensitive/timeout instead of magnet id
         bool fss = PynqConnection.Instance != null && PynqConnection.Instance.FssMode;
 
-        for (int y = 0; y < height; y++){
-            for (int x = 0; x < width; x++){
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
                 int pixel = msg.pixels[y * width + x];
-
                 DecodePixel(pixel, msg.bitDepth, out int category, out int depth);
 
-                int bufPos = (height - y - 1) * width + x; //array buffer is inverted in unity, flip y
-
                 Color32 catColor = fss ? FssColorizer.Colorize(pixel) : palette[category];
-                catPixels[bufPos] = catColor;
-
-                byte intensity = (byte)((depth * 255) / depthMax);
-                valPixels[bufPos] = PlasmaColor(intensity);
 
                 //3d:
                 int meshIdx = y * width + x;
                 verts3D[meshIdx] = new Vector3(x * xyScale, depth * depthScale, y * xyScale);
                 vertColors3D[meshIdx] = catColor;
+            }
+        }
+
+        // The simulation domain is square even when the sample grid is not, so
+        // stretch non-square buffers into a square texture for display.
+        for (int sy = 0; sy < displaySize; sy++)
+        {
+            int sourceY = Mathf.Min((sy * displaySourceHeight) / displaySize, displaySourceHeight - 1);
+            int dstY = displaySize - sy - 1; //array buffer is inverted in unity, flip y
+
+            for (int sx = 0; sx < displaySize; sx++)
+            {
+                int sourceX = Mathf.Min((sx * width) / displaySize, width - 1);
+                int pixel = msg.pixels[sourceY * width + sourceX];
+
+                DecodePixel(pixel, msg.bitDepth, out int category, out int depth);
+                Color32 catColor = fss ? FssColorizer.Colorize(pixel) : palette[category];
+                byte intensity = (byte)((depth * 255) / depthMax);
+
+                int bufPos = dstY * displaySize + sx;
+                catPixels[bufPos] = catColor;
+                valPixels[bufPos] = PlasmaColor(intensity);
             }
         }
 

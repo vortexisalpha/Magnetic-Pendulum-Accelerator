@@ -552,7 +552,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MagnetRenderer
   miniDisplay: {fileID: 2069797785}
   pollIntervalSeconds: 0.03
-  magnetRadius: 4
+  pynqSendMinIntervalSeconds: 0.15
+  pynqSendPositionEpsilon: 0.01
   flaskURL: http://35.179.111.223:5000/
 --- !u!4 &345777378
 Transform:
@@ -1451,7 +1452,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PanZoom
   panningSensitivity: 0.01
-  zoomCommitDelay: 0.35
+  zoomCommitDelay: 0.5
   minHalfSize: 0.01
 --- !u!4 &1151704950
 Transform:
@@ -2726,7 +2727,7 @@ MonoBehaviour:
   param: Res Y
   step: 12
   minSteps: 1
-  maxSteps: 50
+  maxSteps: 90
   defaultSteps: 10
 --- !u!1 &1579379335
 GameObject:
@@ -3535,7 +3536,7 @@ MonoBehaviour:
   param: Res X
   step: 12
   minSteps: 1
-  maxSteps: 50
+  maxSteps: 170
   defaultSteps: 10
 --- !u!1 &1780368857
 GameObject:
@@ -4295,6 +4296,8 @@ MonoBehaviour:
   closeButtonMargin: {x: 6, y: 6}
   closeButtonColor: {r: 0.1, g: 0.1, b: 0.1, a: 0.85}
   trajectorySlider: {fileID: 450200142}
+  markerSize: 14
+  markerColour: {r: 0, g: 0, b: 0, a: 1}
 --- !u!1 &1934254245
 GameObject:
   m_ObjectHideFlags: 0

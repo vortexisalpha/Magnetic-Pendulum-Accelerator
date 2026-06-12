@@ -15,7 +15,7 @@ public class PanZoom : MonoBehaviour
 
     private Vector2 deltaMouse = Vector2.zero;
     [SerializeField] private float panningSensitivity = 0.01f;
-    [SerializeField] private float zoomCommitDelay = 0.35f;
+    [SerializeField] private float zoomCommitDelay = 0.5f;
 
     private float zoomFactor = 0.9f;
     private float maxHalfSize = 1.8f;
@@ -75,6 +75,7 @@ public class PanZoom : MonoBehaviour
             viewportPending = true;
             lastReportedCenter = center;
             lastReportedHalfSize = halfSize;
+            PynqParamController.NotifyViewportChanged();
             ScheduleZoomCommit();
         }
     }
