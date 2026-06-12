@@ -35,7 +35,7 @@ public class PynqConnection : MonoBehaviour
     [Header("PYNQ board TCP endpoint")]
 
     [SerializeField] private string host = "192.168.2.99";
-    [SerializeField] private TextMeshProUGUI pynqIP;
+    [SerializeField] private TMP_InputField pynqIPInput;
     [SerializeField] private int port = 12345;
     [Tooltip("Seconds to wait before retrying a dropped/refused connection.")]
     [SerializeField] private float reconnectInterval = 2f;
@@ -115,12 +115,6 @@ public class PynqConnection : MonoBehaviour
 
     void Update()
     {
-        if (pynqIP.text != "")
-        {
-            host = pynqIP.text;
-            print(host.GetType());
-        }
-        Debug.Log($"{pynqIP.text}");
         
         if (notifyConnected)
         {
@@ -158,8 +152,50 @@ public class PynqConnection : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
-    public void SendParams(float dampingFactor, float magneticStrength, float pendulumLength, float pendulumHeight,
-                           int resX, int resY)
+    public void ConnectToPynq(){
+        string newHost = pynqIPInput.text.Trim();
+
+        if (string.IsNullOrWhiteSpace(newHost))
+        {
+            Debug.LogWarning("[Pynq] No IP address entered.");
+            return;
+        }
+
+        host = newHost;
+
+        StopConnection();
+
+        running = true;
+        ioThread = new Thread(IoLoop)
+        {
+            IsBackground = true,
+            Name = "PynqIO"
+        };
+        ioThread.Start();
+
+        Debug.Log($"[Pynq] Attempting connection to {host}:{port}");
+    }
+
+
+    private void StopConnection()
+    {
+        running = false;
+
+        try { stream?.Close(); } catch { }
+        try { client?.Close(); } catch { }
+
+        if (ioThread != null && ioThread.IsAlive)
+        {
+            if (!ioThread.Join(500))
+                Debug.LogWarning("[Pynq] IO thread did not stop within 500 ms.");
+        }
+
+        connected = false;
+        hasSentParams = false;
+    }
+
+
+    public void SendParams(float dampingFactor, float magneticStrength, float pendulumLength, float pendulumHeight, int resX, int resY)
     {
         bool fss = FssMode;
 
