@@ -551,7 +551,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MagnetRenderer
   miniDisplay: {fileID: 2069797785}
-  pollIntervalSeconds: 0.1
+  pollIntervalSeconds: 0.03
   magnetRadius: 4
   flaskURL: http://35.179.111.223:5000/
 --- !u!4 &345777378
