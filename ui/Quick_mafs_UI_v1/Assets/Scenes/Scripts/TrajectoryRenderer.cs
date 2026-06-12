@@ -1,4 +1,5 @@
-using System; 
+using System;
+using System.Threading;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -32,6 +33,14 @@ public class TrajectoryRenderer : MonoBehaviour
 
     [Header("Playback")]
     [SerializeField] private Slider trajectorySlider; 
+
+    [Header("Moving Marker")]
+    [SerializeField] private float markerSize = 14f;
+    [SerializeField] private Color markerColour = Color.black; 
+
+    private RawImage markerImage;
+
+    private Texture2D markerTexture; 
 
     private RectTransform canvasRoot;
     private RawImage overlayImage;
@@ -69,8 +78,7 @@ public class TrajectoryRenderer : MonoBehaviour
         if (imageToggle != null && imageToggle.isOn != lastImageToggleOn &&
             overlayImage != null && overlayImage.gameObject.activeSelf)
         {
-            //bug #1 fix: guard the slider; fall back to the full trajectory if it's
-            //not assigned, instead of throwing a NullReferenceException every frame
+    
             int count = trajectorySlider != null
                 ? Mathf.RoundToInt(trajectorySlider.value)
                 : (storedPoints != null ? storedPoints.Length : 0);
@@ -152,6 +160,28 @@ public class TrajectoryRenderer : MonoBehaviour
 
         TrajectoryTexturePainter.Paint(overlayTexture, slice, view, start, end, lineThickness);
         AlignOverlay();
+        
+        MoveMarkerToPoint(storedPoints[count - 1], view);
+
+    }
+
+    private void MoveMarkerToPoint(Vector2 point, TrajectoryTexturePainter.Viewport view)
+    {
+       if (markerImage == null || overlayImage == null) return; 
+
+       RectTransform overlayRt = overlayImage.rectTransform; 
+       RectTransform markerRt = markerImage.rectTransform; 
+
+       float u = Mathf.InverseLerp(view.xMin, view.xMax, point.x); 
+       float v = Mathf.InverseLerp(view.yMin, view.yMax, point.y);
+
+       float localX = (u - 0.5f) * overlayRt.sizeDelta.x;
+       float localY = (v - 0.5f) * overlayRt.sizeDelta.y;
+       
+       markerRt.anchorMin = markerRt.anchorMax = new Vector2(0.5f, 0.5f);
+       markerRt.pivot = new Vector2(0.5f, 0.5f);
+       
+       markerRt.anchoredPosition = overlayRt.anchoredPosition + new Vector2(localX, localY);
 
     }
 
@@ -159,6 +189,7 @@ public class TrajectoryRenderer : MonoBehaviour
     {
         if (overlayImage != null) overlayImage.gameObject.SetActive(visible);
         if (closeButton != null) closeButton.gameObject.SetActive(visible);
+        if (markerImage != null) markerImage.gameObject.SetActive(visible);
     }
 
     public void Close() => SetVisible(false);
@@ -181,7 +212,43 @@ public class TrajectoryRenderer : MonoBehaviour
         overlayImage.texture = overlayTexture;
         overlayImage.raycastTarget = false;
 
+        BuildMarker();
         BuildCloseButton();
+
+    }
+
+    private void BuildMarker()
+
+    {
+        markerTexture = MakeCircleTexture(64, markerColour);
+
+        var markerGo = new GameObject("TrajectoryMarker", typeof(RawImage));
+        markerImage = markerGo.GetComponent<RawImage>(); 
+        markerImage.rectTransform.SetParent(canvasRoot, false); 
+        markerImage.texture = markerTexture;
+        markerImage.raycastTarget = false; 
+        markerImage.rectTransform.sizeDelta = new Vector2(markerSize, markerSize);
+    }
+
+    private Texture2D MakeCircleTexture(int size, Color color)
+    {
+        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Bilinear;
+
+        Vector2 centre =  new Vector2(size / 2f, size / 2f);
+        float radius = size / 2f; 
+        
+
+        for(int y = 0; y < size; y++)
+        {
+            for(int x = 0; x < size; x++)
+            {
+                float dist = Vector2.Distance(new Vector2(x, y), centre);
+                tex.SetPixel(x, y, dist <= radius ? color : Color.clear);
+            }
+        }
+        tex.Apply();
+        return tex; 
     }
 
     private void BuildCloseButton()
@@ -209,7 +276,7 @@ public class TrajectoryRenderer : MonoBehaviour
     private void AlignOverlay()
     {
         var corners = new Vector3[4];
-        displayImage.rectTransform.GetWorldCorners(corners); //0 BL, 1 TL, 2 TR, 3 BR
+        displayImage.rectTransform.GetWorldCorners(corners); 
         Vector2 bottomLeft = WorldToCanvas(corners[0]);
         Vector2 topLeft = WorldToCanvas(corners[1]);
         Vector2 topRight = WorldToCanvas(corners[2]);
