@@ -6,6 +6,7 @@ using System.Threading;
 using System.Collections.Concurrent;
 using UnityEngine;
 using Newtonsoft.Json;
+using TMPro;
 
 public sealed class ImageMessage
 {
@@ -32,7 +33,9 @@ public class PynqConnection : MonoBehaviour
     public static PynqConnection Instance { get; private set; }
 
     [Header("PYNQ board TCP endpoint")]
+
     [SerializeField] private string host = "192.168.2.99";
+    [SerializeField] private TextMeshProUGUI pynqIP;
     [SerializeField] private int port = 12345;
     [Tooltip("Seconds to wait before retrying a dropped/refused connection.")]
     [SerializeField] private float reconnectInterval = 2f;
@@ -112,6 +115,13 @@ public class PynqConnection : MonoBehaviour
 
     void Update()
     {
+        if (pynqIP.text != "")
+        {
+            host = pynqIP.text;
+            print(host.GetType());
+        }
+        Debug.Log($"{pynqIP.text}");
+        
         if (notifyConnected)
         {
             notifyConnected = false;
