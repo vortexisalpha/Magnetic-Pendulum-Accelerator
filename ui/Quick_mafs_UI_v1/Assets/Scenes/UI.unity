@@ -1336,7 +1336,7 @@ GameObject:
   - component: {fileID: 694631981}
   - component: {fileID: 694631980}
   m_Layer: 5
-  m_Name: Potential Well
+  m_Name: PotentialWellButton
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1351,7 +1351,7 @@ RectTransform:
   m_GameObject: {fileID: 694631978}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 0.6, y: 0.6, z: 0.6}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1277552518}
@@ -1359,8 +1359,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 127.46, y: -113.87}
-  m_SizeDelta: {x: 129.7375, y: 57.7406}
+  m_AnchoredPosition: {x: 266, y: -176}
+  m_SizeDelta: {x: 160, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &694631980
 MonoBehaviour:
@@ -1915,7 +1915,7 @@ GameObject:
   - component: {fileID: 832665099}
   - component: {fileID: 832665098}
   m_Layer: 5
-  m_Name: Select2DMap
+  m_Name: MapDropdown
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1940,7 +1940,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 239, y: -146}
   m_SizeDelta: {x: 160, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &832665098
@@ -5303,7 +5303,7 @@ GameObject:
   - component: {fileID: 1862792690}
   - component: {fileID: 1862792689}
   m_Layer: 5
-  m_Name: MainUI
+  m_Name: Canvas
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -5397,8 +5397,8 @@ RectTransform:
   - {fileID: 832665097}
   - {fileID: 2069797787}
   - {fileID: 1331283924}
-  - {fileID: 1456527318}
   - {fileID: 694631979}
+  - {fileID: 1456527318}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -6037,7 +6037,7 @@ GameObject:
   - component: {fileID: 2069797786}
   - component: {fileID: 2069797785}
   m_Layer: 5
-  m_Name: MagnetSim
+  m_Name: MagnetRendererWindow
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
