@@ -69,9 +69,6 @@ public class PanZoom : MonoBehaviour
     }
     void OnZoom(InputValue input)
     {
-        if (MagnetPendulumPreview.IsPointerOverPreview)
-            return;
-
         if (!IsPointerOverMapRegion())
             return;
         float scroll = input.Get<Vector2>().y;
@@ -100,8 +97,6 @@ public class PanZoom : MonoBehaviour
 
     void OnPan(InputValue input)
     {
-        if (MagnetPendulumPreview.IsPointerOverPreview || MagnetPendulumPreview.IsPointerControllingPreview)
-            return;
 
         deltaMouse = input.Get<Vector2>();
 
