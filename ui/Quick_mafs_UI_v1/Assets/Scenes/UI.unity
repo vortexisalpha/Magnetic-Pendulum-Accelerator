@@ -5579,6 +5579,7 @@ GameObject:
   - component: {fileID: 1930109278}
   - component: {fileID: 1930109277}
   - component: {fileID: 1930109279}
+  - component: {fileID: 1930109280}
   m_Layer: 0
   m_Name: PynqConnection
   m_TagString: Untagged
@@ -5642,6 +5643,23 @@ MonoBehaviour:
   trajectorySlider: {fileID: 450200142}
   markerSize: 14
   markerColour: {r: 0, g: 0, b: 0, a: 1}
+--- !u!114 &1930109280
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1930109276}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b8a1c9d2f7646d8a9c6e2f3b4a7d901, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LatencyStatsDisplay
+  toggleAnchoredPosition: {x: 140, y: -6}
+  panelAnchoredPosition: {x: 16, y: -16}
+  panelSize: {x: 360, y: 118}
+  toggleSize: {x: 160, y: 20}
+  visibleOnStart: 1
 --- !u!1 &1954737496
 GameObject:
   m_ObjectHideFlags: 0

@@ -7,6 +7,7 @@ using System.Collections.Concurrent;
 using UnityEngine;
 using Newtonsoft.Json;
 using TMPro;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 public sealed class ImageMessage
 {
@@ -28,6 +29,17 @@ public sealed class InfoMessage
     public Dictionary<string, MagnetCoords> magnets;
 }
 
+public sealed class LatencyStatsMessage
+{
+    public int version;
+    public int requestId;
+    public float arucoMarkerFlaskLatencyMs = -1f;
+    public float tcpConnectionTransferLatencyMs = -1f;
+    public float fpgaComputeTimeMs = -1f;
+    public float pynqImageSendTimeMs = -1f;
+    public float totalEndToEndLatencyMs = -1f;
+}
+
 public class PynqConnection : MonoBehaviour
 {
     public static PynqConnection Instance { get; private set; }
@@ -47,6 +59,7 @@ public class PynqConnection : MonoBehaviour
     private const byte MSG_TRAJ_REQ = 0x04;
     private const byte MSG_IMAGE = 0x10;
     private const byte MSG_INFO = 0x11;
+    private const byte MSG_STATS = 0x12;
     private const byte MSG_TRAJ = 0x14;
     private const int IMAGE_HEADER = 9; //u16 w + u16 h + u8 depth + u32 version
     private const int TRAJ_HEADER = 6; //u32 pixel_id + u16 n
@@ -54,10 +67,12 @@ public class PynqConnection : MonoBehaviour
     //events are always raised on the Unity main thread
     public event Action<ImageMessage> ImageReceived;
     public event Action<InfoMessage> InfoReceived;
+    public event Action<LatencyStatsMessage> LatencyStatsReceived;
     public event Action<TrajectoryMessage> TrajectoryReceived;
 
     public ImageMessage LatestImage { get; private set; }
     public InfoMessage LatestInfo { get; private set; }
+    public LatencyStatsMessage LatestLatencyStats { get; private set; } = new LatencyStatsMessage();
     public TrajectoryMessage LatestTrajectory { get; private set; }
     public bool IsConnected => connected;
 
@@ -91,6 +106,7 @@ public class PynqConnection : MonoBehaviour
     private readonly object writeLock = new object();
 
     private readonly ConcurrentQueue<object> inbound = new ConcurrentQueue<object>();
+    private readonly ConcurrentDictionary<int, long> pendingRequestTicks = new ConcurrentDictionary<int, long>();
 
     private float lastSentDampingFactor, lastSentMagneticStrength, lastSentPendulumLength, lastSentPendulumHeight;
     private bool lastSentFss;
@@ -111,6 +127,9 @@ public class PynqConnection : MonoBehaviour
         running = true;
         ioThread = new Thread(IoLoop) { IsBackground = true, Name = "PynqIO" };
         ioThread.Start();
+
+        if (GetComponent<LatencyStatsDisplay>() == null)
+            gameObject.AddComponent<LatencyStatsDisplay>();
     }
 
     void Update()
@@ -135,6 +154,9 @@ public class PynqConnection : MonoBehaviour
                 case InfoMessage info:
                     LatestInfo = info;
                     InfoReceived?.Invoke(info);
+                    break;
+                case LatencyStatsMessage stats:
+                    MergeLatencyStats(stats);
                     break;
                 case TrajectoryMessage traj:
                     LatestTrajectory = traj;
@@ -222,6 +244,7 @@ public class PynqConnection : MonoBehaviour
         {
             version = paramVersion,
             requestId,
+            clientSentUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             dampingFactor,
             magneticStrength,
             pendulumLength,
@@ -233,8 +256,12 @@ public class PynqConnection : MonoBehaviour
         byte[] frame = BuildFrame(MSG_PARAMS, Encoding.UTF8.GetBytes(json));
         Debug.Log($"[Pynq] send PARAMS v{paramVersion} req={requestId}: {json}");
 
+        TrackRequest(requestId);
         if (!WriteFrame(frame))
+        {
+            pendingRequestTicks.TryRemove(requestId, out _);
             return;
+        }
 
         lastSentDampingFactor = dampingFactor;
         lastSentMagneticStrength = magneticStrength;
@@ -251,21 +278,34 @@ public class PynqConnection : MonoBehaviour
     public void SendMagnets(Dictionary<string, MagnetCoords> magnets)
     {
         if (magnets == null) return;
-        string json = JsonConvert.SerializeObject(new { magnets });
-        WriteFrame(BuildFrame(MSG_MAGNETS, Encoding.UTF8.GetBytes(json)));
+        int requestId = ++renderRequestId;
+        string json = JsonConvert.SerializeObject(new
+        {
+            requestId,
+            clientSentUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            magnets
+        });
+        TrackRequest(requestId);
+        if (!WriteFrame(BuildFrame(MSG_MAGNETS, Encoding.UTF8.GetBytes(json))))
+            pendingRequestTicks.TryRemove(requestId, out _);
     }
 
     public void SendViewport(float xMin, float xMax, float yMin, float yMax)
     {
         Debug.Log("PynqConnection - sending viewport...");
+        int requestId = ++renderRequestId;
         string json = JsonConvert.SerializeObject(new
         {
+            requestId,
+            clientSentUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             x_min = xMin,
             x_max = xMax,
             y_min = yMin,
             y_max = yMax
         });
-        WriteFrame(BuildFrame(MSG_VIEWPORT, Encoding.UTF8.GetBytes(json)));
+        TrackRequest(requestId);
+        if (!WriteFrame(BuildFrame(MSG_VIEWPORT, Encoding.UTF8.GetBytes(json))))
+            pendingRequestTicks.TryRemove(requestId, out _);
     }
 
     //0x04 TRAJ_REQ: ask the board for the trajectory starting at the chosen pixel
@@ -364,6 +404,9 @@ public class PynqConnection : MonoBehaviour
                 case MSG_INFO:
                     inbound.Enqueue(DecodeInfo(payload));
                     break;
+                case MSG_STATS:
+                    inbound.Enqueue(DecodeLatencyStats(payload));
+                    break;
                 case MSG_TRAJ:
                     inbound.Enqueue(DecodeTrajectory(payload));
                     break;
@@ -426,6 +469,75 @@ public class PynqConnection : MonoBehaviour
         if (info.magnets == null)
             info.magnets = new Dictionary<string, MagnetCoords>();
         return info;
+    }
+
+    private LatencyStatsMessage DecodeLatencyStats(byte[] p)
+    {
+        string json = Encoding.UTF8.GetString(p);
+        var stats = JsonConvert.DeserializeObject<LatencyStatsMessage>(json) ?? new LatencyStatsMessage();
+
+        if (stats.requestId > 0 &&
+            pendingRequestTicks.TryRemove(stats.requestId, out long sentTicks))
+        {
+            stats.totalEndToEndLatencyMs = ElapsedMs(sentTicks, Stopwatch.GetTimestamp());
+
+            if (stats.tcpConnectionTransferLatencyMs < 0f)
+            {
+                float fpgaMs = Mathf.Max(0f, stats.fpgaComputeTimeMs);
+                float sendMs = Mathf.Max(0f, stats.pynqImageSendTimeMs);
+                stats.tcpConnectionTransferLatencyMs = Mathf.Max(0f, stats.totalEndToEndLatencyMs - fpgaMs - sendMs);
+            }
+        }
+
+        return stats;
+    }
+
+    public void UpdateArucoMarkerFlaskLatency(float latencyMs)
+    {
+        var stats = CopyStats(LatestLatencyStats);
+        stats.arucoMarkerFlaskLatencyMs = latencyMs;
+        MergeLatencyStats(stats);
+    }
+
+    private void MergeLatencyStats(LatencyStatsMessage stats)
+    {
+        var merged = CopyStats(LatestLatencyStats);
+        if (stats.version > 0) merged.version = stats.version;
+        if (stats.requestId > 0) merged.requestId = stats.requestId;
+        if (stats.arucoMarkerFlaskLatencyMs >= 0f) merged.arucoMarkerFlaskLatencyMs = stats.arucoMarkerFlaskLatencyMs;
+        if (stats.tcpConnectionTransferLatencyMs >= 0f) merged.tcpConnectionTransferLatencyMs = stats.tcpConnectionTransferLatencyMs;
+        if (stats.fpgaComputeTimeMs >= 0f) merged.fpgaComputeTimeMs = stats.fpgaComputeTimeMs;
+        if (stats.pynqImageSendTimeMs >= 0f) merged.pynqImageSendTimeMs = stats.pynqImageSendTimeMs;
+        if (stats.totalEndToEndLatencyMs >= 0f) merged.totalEndToEndLatencyMs = stats.totalEndToEndLatencyMs;
+
+        LatestLatencyStats = merged;
+        LatencyStatsReceived?.Invoke(merged);
+    }
+
+    private static LatencyStatsMessage CopyStats(LatencyStatsMessage source)
+    {
+        if (source == null) return new LatencyStatsMessage();
+        return new LatencyStatsMessage
+        {
+            version = source.version,
+            requestId = source.requestId,
+            arucoMarkerFlaskLatencyMs = source.arucoMarkerFlaskLatencyMs,
+            tcpConnectionTransferLatencyMs = source.tcpConnectionTransferLatencyMs,
+            fpgaComputeTimeMs = source.fpgaComputeTimeMs,
+            pynqImageSendTimeMs = source.pynqImageSendTimeMs,
+            totalEndToEndLatencyMs = source.totalEndToEndLatencyMs
+        };
+    }
+
+    private void TrackRequest(int requestId)
+    {
+        if (requestId > 0)
+            pendingRequestTicks[requestId] = Stopwatch.GetTimestamp();
+    }
+
+    private static float ElapsedMs(long startTicks, long endTicks)
+    {
+        return (float)((endTicks - startTicks) * 1000.0 / Stopwatch.Frequency);
     }
 
     //0x14 TRAJ: u32 pixel_id, u16 n, then n x (f32 x, f32 y), all big-endian

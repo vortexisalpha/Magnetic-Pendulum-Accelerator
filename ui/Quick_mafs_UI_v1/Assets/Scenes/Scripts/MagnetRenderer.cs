@@ -50,10 +50,14 @@ public class MagnetRenderer : MonoBehaviour
 
     IEnumerator FetchAndSendInfo()
     {
+        float requestStartTime = Time.realtimeSinceStartup;
         using (var req = UnityWebRequest.Get(flaskURL + "info"))
         {
             yield return req.SendWebRequest();
             if (req.result != UnityWebRequest.Result.Success) yield break;
+
+            float flaskLatencyMs = (Time.realtimeSinceStartup - requestStartTime) * 1000f;
+            PynqConnection.Instance?.UpdateArucoMarkerFlaskLatency(flaskLatencyMs);
 
             var info = JsonConvert.DeserializeObject<InfoMessage>(req.downloadHandler.text);
             if (info == null || info.magnets == null) yield break;
