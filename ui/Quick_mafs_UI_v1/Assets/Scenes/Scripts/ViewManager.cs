@@ -49,8 +49,6 @@ public class ViewManager : MonoBehaviour
         orbitCamera.enabled = false;
     }
 
-    //build the 'Potential' button at runtime so no scene wiring is needed beyond
-    //the parent canvas; mirrors the code-built button pattern in TrajectoryRenderer
     private void BuildPotentialButton()
     {
         if (potentialButtonParent == null)

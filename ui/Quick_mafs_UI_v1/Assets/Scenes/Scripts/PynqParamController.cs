@@ -59,8 +59,6 @@ public class PynqParamController : MonoBehaviour
     private Coroutine previewTimeoutRoutine;
     private readonly HashSet<Slider> previewBoundSliders = new HashSet<Slider>();
 
-    //live snapshot of the current slider values, used by views (e.g. the potential
-    //surface) that need the same parameters without going through the FPGA
     public static ControlData CurrentData
     {
         get

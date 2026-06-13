@@ -11,13 +11,27 @@ public class PotentialSurfaceRenderer : MonoBehaviour, IDragHandler, IScrollHand
     [SerializeField] private float panSensitivity = 0.004f;
     [SerializeField] private float zoomSensitivity = 0.1f;
 
+    [Header("Trajectory")]
+    [Tooltip("Width of the lifted trajectory line, in surface units.")]
+    [SerializeField] private float trajectoryWidth = 0.03f;
+    [Tooltip("Small lift above the surface so the line doesn't z-fight with it.")]
+    [SerializeField] private float trajectoryZOffset = 0.02f;
+    [Tooltip("Trajectory line colour (drawn on top of the surface for contrast).")]
+    [SerializeField] private Color trajectoryColor = Color.white;
+
     private RenderTexture renderTexture;
     private GameObject sceneRoot;
     private Camera previewCamera;
     private GameObject surfaceObject;
     private bool cameraFramed;
 
-    //orbit state, driven by drag/scroll (Z is the up axis for this surface)
+    private float currentOmega, currentMu, currentH;
+    private Vector2[] currentMagnets;
+
+    private GameObject trajectoryObject;
+    private LineRenderer trajectoryLine;
+    private Vector2[] trajectoryPoints;
+
     private Vector3 cameraTarget;
     private float cameraDistance = 8f;
     private float yawDegrees = -90f;
@@ -35,20 +49,40 @@ public class PotentialSurfaceRenderer : MonoBehaviour, IDragHandler, IScrollHand
             return;
         }
 
-        Debug.Log("[PotentialSurface] building scene...");
         BuildScene();
+
+        if (PynqConnection.Instance != null)
+            PynqConnection.Instance.TrajectoryReceived += OnTrajectoryReceived;
+
+        if (PynqConnection.Instance != null && PynqConnection.Instance.LatestTrajectory != null)
+            trajectoryPoints = PynqConnection.Instance.LatestTrajectory.points;
     }
 
     void OnEnable()
     {
         if (sceneRoot != null)
+        {
             BuildMesh();
+            BuildTrajectoryLine();
+        }
     }
 
     void OnDestroy()
     {
+        if (PynqConnection.Instance != null)
+            PynqConnection.Instance.TrajectoryReceived -= OnTrajectoryReceived;
         if (sceneRoot != null) Destroy(sceneRoot);
         if (renderTexture != null) { renderTexture.Release(); Destroy(renderTexture); }
+    }
+
+    private void OnTrajectoryReceived(TrajectoryMessage msg)
+    {
+        if (msg == null || msg.points == null || msg.points.Length == 0)
+            return;
+
+        trajectoryPoints = msg.points;
+        if (sceneRoot != null)
+            BuildTrajectoryLine();
     }
 
     void BuildScene()
@@ -99,7 +133,10 @@ public class PotentialSurfaceRenderer : MonoBehaviour, IDragHandler, IScrollHand
         float h = data.pendulumHeight;
         Vector2[] magnets = GetMagnetPositions();
 
-        Debug.Log($"[PotentialSurface] rebuild: omega(L)={omega} mu={mu} h={h} magnets={magnets.Length}");
+        currentOmega = omega;
+        currentMu = mu;
+        currentH = h;
+        currentMagnets = magnets;
 
         int n = 48;
         float range = 1.8f;
@@ -127,7 +164,7 @@ public class PotentialSurfaceRenderer : MonoBehaviour, IDragHandler, IScrollHand
             int idx = yi * n + xi;
             float x = Mathf.Lerp(-range, range, xi / (float)(n - 1));
             float y = Mathf.Lerp(-range, range, yi / (float)(n - 1));
-            float t = (raw[idx] - vMin) / span;       
+            float t = (raw[idx] - vMin) / span;
             vertices[idx] = new Vector3(x, y, raw[idx] * ZScale);
             colors[idx] = SampleGradient(t);
         }
@@ -155,6 +192,39 @@ public class PotentialSurfaceRenderer : MonoBehaviour, IDragHandler, IScrollHand
         go.AddComponent<MeshRenderer>().material = CreateMaterial();
 
         FrameCamera(mesh.bounds);
+        BuildTrajectoryLine();
+    }
+
+    private void BuildTrajectoryLine()
+    {
+        if (trajectoryObject != null) Destroy(trajectoryObject);
+        trajectoryLine = null;
+
+        if (trajectoryPoints == null || trajectoryPoints.Length < 2 || sceneRoot == null)
+            return;
+
+        trajectoryObject = new GameObject("PotentialTrajectory");
+        trajectoryObject.transform.SetParent(sceneRoot.transform, false);
+
+        trajectoryLine = trajectoryObject.AddComponent<LineRenderer>();
+        trajectoryLine.useWorldSpace = false;
+        trajectoryLine.widthMultiplier = trajectoryWidth;
+        trajectoryLine.numCornerVertices = 2;
+        trajectoryLine.numCapVertices = 2;
+        trajectoryLine.material = CreateTrajectoryMaterial();
+        trajectoryLine.startColor = trajectoryColor;
+        trajectoryLine.endColor = trajectoryColor;
+
+        var positions = new Vector3[trajectoryPoints.Length];
+        for (int i = 0; i < trajectoryPoints.Length; i++)
+        {
+            Vector2 p = trajectoryPoints[i];
+            float v = PotentialEvaluator.Evaluate(p.x, p.y, currentMagnets, currentOmega, currentMu, currentH);
+            positions[i] = new Vector3(p.x, p.y, v * ZScale + trajectoryZOffset);
+        }
+
+        trajectoryLine.positionCount = positions.Length;
+        trajectoryLine.SetPositions(positions);
     }
 
     private void FrameCamera(Bounds bounds)
@@ -221,14 +291,27 @@ public class PotentialSurfaceRenderer : MonoBehaviour, IDragHandler, IScrollHand
         return new Material(shader);
     }
 
-    //colormap (blue well -> cyan -> green -> yellow -> red rim) for t in [0, 1]
+    private Material CreateTrajectoryMaterial()
+    {
+        Shader shader = Shader.Find("Hidden/Internal-Colored");
+        if (shader == null)
+            shader = Shader.Find("Sprites/Default");
+
+        var mat = new Material(shader);
+        mat.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
+        mat.SetInt("_ZWrite", 0);
+        mat.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
+        mat.renderQueue = 4000;
+        return mat;
+    }
+
     private static readonly Color[] GradientStops =
     {
-        new Color(0.15f, 0.10f, 0.45f), //deepest wells
+        new Color(0.15f, 0.10f, 0.45f),
         new Color(0.00f, 0.55f, 0.85f),
         new Color(0.10f, 0.75f, 0.30f),
         new Color(0.95f, 0.85f, 0.15f),
-        new Color(0.85f, 0.20f, 0.15f), //highest rim
+        new Color(0.85f, 0.20f, 0.15f),
     };
 
     private static Vector2[] GetMagnetPositions()
