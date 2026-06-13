@@ -37,6 +37,7 @@ public class PanZoom : MonoBehaviour
             viewportPending = true;
             lastReportedCenter = center;
             lastReportedHalfSize = halfSize;
+            PynqParamController.NotifyViewportChanged();
         }
 
         if (viewportPending && Mouse.current != null && Mouse.current.leftButton.wasReleasedThisFrame)
