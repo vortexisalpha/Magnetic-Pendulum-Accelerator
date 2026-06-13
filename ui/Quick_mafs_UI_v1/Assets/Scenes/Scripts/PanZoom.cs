@@ -20,12 +20,21 @@ public class PanZoom : MonoBehaviour
     private float zoomFactor = 0.9f;
     private float maxHalfSize = 1.8f;
     [SerializeField] private float minHalfSize = 0.01f;
+    [SerializeField] RectTransform mapRegion; //If mouse is over this area, allow panning and zooming
 
     private bool viewportPending;
     private Coroutine zoomCommitRoutine;
 
     void Update()
     {
+        if (!IsPointerOverMapRegion())
+        {
+            deltaMouse = Vector2.zero;
+            return;
+        }
+
+        center = ApplyPan(center, deltaMouse);
+        deltaMouse = Vector2.zero;
         center = ApplyPan(center, deltaMouse);
         deltaMouse = Vector2.zero;
 
@@ -52,11 +61,19 @@ public class PanZoom : MonoBehaviour
         yMax = center.y + halfSize;
     }
 
+    private bool IsPointerOverMapRegion()
+    {
+        Vector2 mousePos = Mouse.current.position.ReadValue();
+        return RectTransformUtility.RectangleContainsScreenPoint(
+        mapRegion, mousePos, null);
+    }
     void OnZoom(InputValue input)
     {
         if (MagnetPendulumPreview.IsPointerOverPreview)
             return;
 
+        if (!IsPointerOverMapRegion())
+            return;
         float scroll = input.Get<Vector2>().y;
         float candidateHalfSize = halfSize;
         if (scroll > 0)
