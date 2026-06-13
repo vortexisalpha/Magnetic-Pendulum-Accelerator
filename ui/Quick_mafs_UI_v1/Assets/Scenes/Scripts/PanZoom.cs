@@ -35,8 +35,6 @@ public class PanZoom : MonoBehaviour
 
         center = ApplyPan(center, deltaMouse);
         deltaMouse = Vector2.zero;
-        center = ApplyPan(center, deltaMouse);
-        deltaMouse = Vector2.zero;
 
         bool centerChanged = Vector2.Distance(center, lastReportedCenter) > viewportSendEpsilon;
         bool sizeChanged = Mathf.Abs(halfSize - lastReportedHalfSize) > viewportSendEpsilon;
@@ -84,15 +82,29 @@ public class PanZoom : MonoBehaviour
             candidateHalfSize = Mathf.Min(candidateHalfSize, maxHalfSize);
         }
 
-        if (!Violate(center, candidateHalfSize))
-        {
-            halfSize = candidateHalfSize;
-            viewportPending = true;
-            lastReportedCenter = center;
-            lastReportedHalfSize = halfSize;
-            PynqParamController.NotifyViewportChanged();
-            ScheduleZoomCommit();
-        }
+        Vector2 candidateCenter = ClampCenterToFitZoom(center, candidateHalfSize); 
+
+        halfSize = candidateHalfSize;
+        center = candidateCenter;
+        
+        viewportPending = true;
+        lastReportedCenter = center;
+        lastReportedHalfSize = halfSize;
+        PynqParamController.NotifyViewportChanged();
+        ScheduleZoomCommit();
+    }
+
+    Vector2 ClampCenterToFitZoom(Vector2 center, float halfSize)
+    {
+        float minCenterCoord = -simHalfSize + halfSize; // center.x and .y have the same min and max
+        float maxCenterCoord = simHalfSize - halfSize;
+
+        // If candidateHalfSize reaches the full simulation half-size,
+        // minCenter and maxCenter both become 0, so center becomes (0, 0).
+        float clamped_x = Mathf.Clamp(center.x, minCenterCoord, maxCenterCoord);
+        float clamped_y = Mathf.Clamp(center.y, minCenterCoord, maxCenterCoord);
+
+        return new Vector2(clamped_x, clamped_y);
     }
 
     void OnPan(InputValue input)
