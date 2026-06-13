@@ -19,7 +19,7 @@ public class FssModeToggle : MonoBehaviour
     {
         if (toggle != null)
         {
-            toggle.onValueChanged.AddListener(SetFss);
+            //toggle.onValueChanged.AddListener(SetFss);
             SetFss(toggle.isOn); //sync board/renderer with the initial toggle state
         }
     }

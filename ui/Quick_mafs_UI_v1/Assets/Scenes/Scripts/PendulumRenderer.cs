@@ -8,8 +8,8 @@ public class PendulumRenderer : MonoBehaviour
 
     public static void ResetFetchedVersion() => LastFetchedVersion = 0;
 
-    [SerializeField] private RawImage categoryImage;
-    [SerializeField] private RawImage valueImage;
+    [SerializeField] private RawImage boaImage;
+    [SerializeField] private RawImage settlingTimeImage;
 
     Color32[] palette = {
                 new Color32(30,30,30,255),
@@ -53,6 +53,7 @@ public class PendulumRenderer : MonoBehaviour
 
     void Start()
     {
+        Set2DMap(0);
         if (PynqConnection.Instance != null)
         {
             PynqConnection.Instance.ImageReceived += ApplyImage;
@@ -171,8 +172,8 @@ public class PendulumRenderer : MonoBehaviour
         texCategory.Apply();
         texValue.Apply();
 
-        categoryImage.texture = texCategory;
-        valueImage.texture = texValue;
+        boaImage.texture = texCategory;
+        settlingTimeImage.texture = texValue;
 
         //3d:
         runtimeMesh.vertices = verts3D;
@@ -185,9 +186,45 @@ public class PendulumRenderer : MonoBehaviour
         ImagePostToFrameTimer.OnFrameOutput(msg);
     }
 
-    public void SetCategoryVisible(bool visible)
+    private int prevDropdownId = 0;
+    public void Set2DMap(int dropdownId)
     {
-        valueImage.gameObject.SetActive(visible);
+        Debug.Log(dropdownId);
+        switch (dropdownId)
+        {
+            case 0:
+                SetFssFalse(prevDropdownId);
+                boaImage.gameObject.SetActive(true);
+                settlingTimeImage.gameObject.SetActive(false);
+                prevDropdownId = 0;
+                break;
+            case 1:
+                SetFssFalse(prevDropdownId);
+                boaImage.gameObject.SetActive(false);
+                settlingTimeImage.gameObject.SetActive(true);
+                prevDropdownId = 1;
+                break;
+            case 2:
+                PynqConnection.Instance?.SetFssMode(true);
+                PynqParamController.NotifyFssChanged();
+                boaImage.gameObject.SetActive(true);
+                settlingTimeImage.gameObject.SetActive(false);
+                prevDropdownId = 2;
+                break;
+            default:
+                boaImage.gameObject.SetActive(true);
+                settlingTimeImage.gameObject.SetActive(false);
+                prevDropdownId = 0;
+                break;
+        }
+    }
+    private void SetFssFalse(int prevDropdownId)
+    {
+        if (prevDropdownId == 2)
+        {
+            PynqConnection.Instance?.SetFssMode(false);
+            PynqParamController.NotifyFssChanged();
+        }
     }
 
     Color32 PlasmaColor(byte value)
