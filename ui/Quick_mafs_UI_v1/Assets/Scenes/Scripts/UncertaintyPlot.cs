@@ -130,10 +130,14 @@ public class UncertaintyPlot : MonoBehaviour
         if (titleText != null) titleText.text = title;
         if (aboutText != null) aboutText.text = explanation;
         BuildLegendUI(all);
+        DrawLegendKey(all, x0, x1, y0, y1);
 
-        AddLabel(xAxisLabel, (x0 + x1) * 0.5f / t, (y0 * 0.34f) / t, new Vector2(0.5f, 0.5f),
+        AddLabel(TitleCase(title), 0.5f, (textureSize - 26) / t, new Vector2(0.5f, 1f),
+                 44, TextDark, TextAnchor.UpperCenter, 0f, 1400);
+
+        AddLabel(TitleCase(xAxisLabel), (x0 + x1) * 0.5f / t, (y0 * 0.34f) / t, new Vector2(0.5f, 0.5f),
                  32, TextDark, TextAnchor.MiddleCenter, 0f, 520);
-        AddLabel(yAxisLabel, (x0 * 0.24f) / t, (y0 + y1) * 0.5f / t, new Vector2(0.5f, 0.5f),
+        AddLabel(TitleCase(yAxisLabel), (x0 * 0.24f) / t, (y0 + y1) * 0.5f / t, new Vector2(0.5f, 0.5f),
                  32, TextDark, TextAnchor.MiddleCenter, 90f, 520);
 
         for (int e = Mathf.CeilToInt(logXMin); e <= Mathf.FloorToInt(logXMax); e++)
@@ -189,6 +193,113 @@ public class UncertaintyPlot : MonoBehaviour
             rrt.sizeDelta = new Vector2(0f, 28f);
             legendRows.Add(row);
         }
+    }
+
+    private readonly List<GameObject> keyObjects = new List<GameObject>();
+
+    private void DrawLegendKey(List<DimensionSeries> all, int x0, int x1, int y0, int y1)
+    {
+        if (display == null) return;
+
+        foreach (var go in keyObjects) Destroy(go);
+        keyObjects.Clear();
+        if (all.Count == 0) return;
+
+        const float padding = 12f;
+        const float headerH = 34f;
+        const float rowH = 38f;
+        const float swatchW = 44f;
+        const float panelW = 360f;
+        float panelH = padding * 2f + headerH + all.Count * rowH;
+
+        var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+        var border = new GameObject("legendKey", typeof(Image));
+        border.transform.SetParent(display.rectTransform, false);
+        var brt = border.GetComponent<RectTransform>();
+        brt.anchorMin = brt.anchorMax = new Vector2(0f, 1f);
+        brt.pivot = new Vector2(0f, 1f);
+        brt.sizeDelta = new Vector2(panelW, panelH);
+        brt.anchoredPosition = new Vector2(40f, -22f);
+        border.GetComponent<Image>().color = new Color(0.24f, 0.24f, 0.26f);
+        keyObjects.Add(border);
+
+        var bg = new GameObject("bg", typeof(Image));
+        bg.transform.SetParent(brt, false);
+        var bgrt = bg.GetComponent<RectTransform>();
+        bgrt.anchorMin = Vector2.zero; bgrt.anchorMax = Vector2.one;
+        bgrt.offsetMin = new Vector2(2f, 2f); bgrt.offsetMax = new Vector2(-2f, -2f);
+        bg.GetComponent<Image>().color = Color.white;
+
+        AddKeyText(brt, font, "Damping factor γ   (dimension D)",
+                   new Vector2(padding, -padding), new Vector2(panelW - padding * 2f, headerH),
+                   new Vector2(0f, 1f), 22, TextDark, TextAnchor.UpperLeft);
+
+        for (int s = 0; s < all.Count; s++)
+        {
+            Color col = seriesColors[s % seriesColors.Length];
+            float rowCenter = -(padding + headerH) - rowH * s - rowH * 0.5f;
+
+            var sw = new GameObject($"swatch_{s}", typeof(Image));
+            sw.transform.SetParent(brt, false);
+            var swrt = sw.GetComponent<RectTransform>();
+            swrt.anchorMin = swrt.anchorMax = new Vector2(0f, 1f);
+            swrt.pivot = new Vector2(0f, 0.5f);
+            swrt.sizeDelta = new Vector2(swatchW, 4f);
+            swrt.anchoredPosition = new Vector2(padding, rowCenter);
+            sw.GetComponent<Image>().color = col;
+
+            string label = all[s].D > 0f
+                ? $"γ = {all[s].b:0.000}    D = {all[s].D:0.00}"
+                : $"γ = {all[s].b:0.000}";
+            AddKeyText(brt, font, label,
+                       new Vector2(padding + swatchW + 10f, rowCenter),
+                       new Vector2(panelW - padding * 2f - swatchW - 10f, rowH),
+                       new Vector2(0f, 0.5f), 22, col, TextAnchor.MiddleLeft);
+        }
+    }
+
+    private static void AddKeyText(RectTransform parent, Font font, string text,
+                                   Vector2 anchoredPos, Vector2 size, Vector2 pivot,
+                                   int fontSize, Color color, TextAnchor align)
+    {
+        var go = new GameObject("text", typeof(Text));
+        go.transform.SetParent(parent, false);
+        var txt = go.GetComponent<Text>();
+        txt.font = font;
+        txt.fontSize = fontSize;
+        txt.color = color;
+        txt.alignment = align;
+        txt.horizontalOverflow = HorizontalWrapMode.Overflow;
+        txt.verticalOverflow = VerticalWrapMode.Overflow;
+        txt.text = text;
+
+        var rt = txt.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = pivot;
+        rt.sizeDelta = size;
+        rt.anchoredPosition = anchoredPos;
+    }
+
+    private static string TitleCase(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return s;
+
+        char[] chars = s.ToCharArray();
+        bool startOfWord = true;
+        for (int i = 0; i < chars.Length; i++)
+        {
+            if (char.IsLetter(chars[i]))
+            {
+                if (startOfWord) chars[i] = char.ToUpperInvariant(chars[i]);
+                startOfWord = false;
+            }
+            else
+            {
+                startOfWord = chars[i] == ' ' || chars[i] == '(' || chars[i] == '/';
+            }
+        }
+        return new string(chars);
     }
 
     private static string Sup(int n)
