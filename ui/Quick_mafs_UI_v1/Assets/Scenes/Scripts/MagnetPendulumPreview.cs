@@ -72,7 +72,7 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
 
             GameObject magnetObject = GetOrCreateMagnet(magnet.Key, magnetIndex);
             magnetObject.transform.localPosition = new Vector3(
-                Mathf.Clamp(magnet.Value.x, -SimHalfSize, SimHalfSize),
+                -Mathf.Clamp(magnet.Value.x, -SimHalfSize, SimHalfSize),
                 Mathf.Clamp(magnet.Value.y, -SimHalfSize, SimHalfSize),
                 magnetHeight * 0.5f);
             seenMagnetKeys.Add(magnet.Key);
