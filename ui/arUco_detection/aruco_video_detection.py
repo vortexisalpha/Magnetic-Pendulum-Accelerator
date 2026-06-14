@@ -113,7 +113,7 @@ def find_marker_centres(corners: list, marker_ids: np.ndarray)-> dict[int, tuple
         
         m_id = marker_id[0]
         centers[m_id] = (x_center, y_center)
-        return centers
+    return centers
 
     
 

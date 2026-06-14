@@ -159,8 +159,7 @@ def diagonal_intersection(single_marker_corners: np.ndarray) -> Optional[tuple[f
     Pure geometry function.
     Finds the marker centre as the intersection of the projected diagonals.
 
-    This preserves your original geometric idea, but uses homogeneous line
-    intersection instead of slope special-casing. This avoids vertical-line
+    This uses homogeneous line intersection instead of slope special-casing. This avoids vertical-line
     edge cases.
     """
     pts = single_marker_corners[0].astype(np.float64)
