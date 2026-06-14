@@ -2,13 +2,15 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
+// Implements only the hover events (enter/exit/move). These are dispatched to the
+// whole hovered hierarchy, so attaching this to child graphics of a control does not
+// consume pointer clicks. Do NOT add IPointerClick/Down/UpHandler here: those are
+// delivered to the first ancestor that handles them and would swallow the click before
+// it reaches the underlying Selectable (e.g. TMP_Dropdown, Button, Slider).
 public sealed class UiTooltipTrigger : MonoBehaviour,
     IPointerEnterHandler,
     IPointerExitHandler,
-    IPointerMoveHandler,
-    IPointerDownHandler,
-    IPointerUpHandler,
-    IPointerClickHandler
+    IPointerMoveHandler
 {
     [TextArea]
     [SerializeField] private string tooltipText;
@@ -17,8 +19,6 @@ public sealed class UiTooltipTrigger : MonoBehaviour,
     private RectTransform rectTransform;
     private Coroutine showRoutine;
     private bool pointerInside;
-    private bool pointerDown;
-    private bool suppressUntilExit;
     private Vector2 lastScreenPosition;
 
     public string TooltipText => tooltipText;
@@ -41,7 +41,6 @@ public sealed class UiTooltipTrigger : MonoBehaviour,
     public void OnPointerEnter(PointerEventData eventData)
     {
         pointerInside = true;
-        suppressUntilExit = false;
         lastScreenPosition = eventData.position;
         QueueShow();
     }
@@ -55,33 +54,12 @@ public sealed class UiTooltipTrigger : MonoBehaviour,
     public void OnPointerExit(PointerEventData eventData)
     {
         pointerInside = false;
-        pointerDown = false;
-        suppressUntilExit = false;
-        Hide();
-    }
-
-    public void OnPointerDown(PointerEventData eventData)
-    {
-        pointerDown = true;
-        suppressUntilExit = true;
-        Hide();
-    }
-
-    public void OnPointerUp(PointerEventData eventData)
-    {
-        pointerDown = false;
-        lastScreenPosition = eventData.position;
-    }
-
-    public void OnPointerClick(PointerEventData eventData)
-    {
-        suppressUntilExit = true;
         Hide();
     }
 
     private void QueueShow()
     {
-        if (string.IsNullOrWhiteSpace(tooltipText) || pointerDown || suppressUntilExit)
+        if (string.IsNullOrWhiteSpace(tooltipText))
             return;
 
         if (showRoutine != null)
@@ -95,7 +73,7 @@ public sealed class UiTooltipTrigger : MonoBehaviour,
         yield return new WaitForSecondsRealtime(showDelaySeconds);
         showRoutine = null;
 
-        if (rectTransform == null || !pointerInside || pointerDown || suppressUntilExit)
+        if (rectTransform == null || !pointerInside)
             yield break;
 
         UiTooltipSystem.Instance.Show(tooltipText, rectTransform, lastScreenPosition);
