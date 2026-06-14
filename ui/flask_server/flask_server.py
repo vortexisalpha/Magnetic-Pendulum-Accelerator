@@ -92,8 +92,9 @@ def construct_mpdata_json(data: MPData) -> str:
         "physical_grid": {},
     }
 
-    for index, magnet in enumerate(data.mag_list):
-        payload["magnets"][f"magnet_{index}"] = {
+    for magnet in data.mag_list:
+
+        payload["magnets"][magnet.uid] = {
             "x": magnet.x,
             "y": magnet.y,
         }
