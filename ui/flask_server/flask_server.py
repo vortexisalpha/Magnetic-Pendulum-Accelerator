@@ -13,6 +13,12 @@ FPGA_PIXEL_BIT_DEPTH = 6
 PHYSICAL_COORD_MIN = -1.8
 PHYSICAL_COORD_MAX = 1.8
 
+MAGNET_OUTPUT_KEYS = {
+    "marker_4": "magnet_0",
+    "marker_5": "magnet_1",
+    "marker_6": "magnet_2",
+}
+
 app = Flask(__name__)
 
 
@@ -93,8 +99,10 @@ def construct_mpdata_json(data: MPData) -> str:
     }
 
     for magnet in data.mag_list:
+        if magnet.x < 0 or magnet.y < 0:
+            continue
 
-        payload["magnets"][magnet.uid] = {
+        payload["magnets"][MAGNET_OUTPUT_KEYS[magnet.uid]] = {
             "x": magnet.x,
             "y": magnet.y,
         }
