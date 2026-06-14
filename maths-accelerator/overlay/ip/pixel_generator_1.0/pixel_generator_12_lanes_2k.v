@@ -1,5 +1,5 @@
 // Overall 12 lanes - 2048x1080 (DCI 2K) band-streaming build
-// The full max 2K frame (2048*1080*6 = 12.6 Mbit) does NOT fit in the PYNQ-Z1's
+// The full max 2K frame (2048*1080*6 = 12.6 Mbit) does not fit in the PYNQ-Z1's
 // 4.9 Mbit of BRAM, instead the image is divided into horizontal bands, everytime a band
 // gets passed into the 12 lanes, once computation done for band advances to next,
 // preserves BRAM usage while still outputting the 32-bit words in raster order
