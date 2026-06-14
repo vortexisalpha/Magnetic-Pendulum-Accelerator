@@ -9,16 +9,30 @@ using UnityEngine.EventSystems;
 public class TrajectoryClicker : MonoBehaviour, IPointerClickHandler
 {
     private RectTransform rect;
+    private float lastClickTime = -1f;
 
     void Awake()
     {
         rect = (RectTransform)transform;
     }
-
     public void OnPointerClick(PointerEventData eventData)
     {
+        // Record single clicks so we can measure the time to the next click.
         if (eventData.clickCount != 2)
+        {
+            if (eventData.clickCount == 1)
+                lastClickTime = Time.time;
             return;
+        }
+
+        // Require a true double-click: clickCount == 2 and the time between
+        // the two clicks must be <= 0.4s.
+        if (Time.time - lastClickTime > 0.4f)
+        {
+            // Too slow between clicks; treat as non-double-click.
+            lastClickTime = Time.time;
+            return;
+        }
 
         Debug.Log($"[Trajectory] image double-clicked at screen {eventData.position}");
         var conn = PynqConnection.Instance;
