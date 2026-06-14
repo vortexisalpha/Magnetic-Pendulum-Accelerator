@@ -725,7 +725,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &173225595
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6023,7 +6023,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f7c9e2175ad1b4542ba63b476f09d510, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PynqConnection
-  host: 192.168.137.62
+  host: 192.168.2.99
   pynqIPInput: {fileID: 0}
   port: 12345
   reconnectInterval: 2
@@ -6518,6 +6518,7 @@ SceneRoots:
   m_Roots:
   - {fileID: 961739753}
   - {fileID: 1862792692}
+  - {fileID: 173225598}
   - {fileID: 1809429740}
   - {fileID: 874619747}
   - {fileID: 2034102361}
@@ -6527,4 +6528,3 @@ SceneRoots:
   - {fileID: 1550765096}
   - {fileID: 1681762938}
   - {fileID: 1930109278}
-  - {fileID: 173225598}
