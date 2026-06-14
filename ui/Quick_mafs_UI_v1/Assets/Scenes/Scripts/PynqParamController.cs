@@ -264,6 +264,24 @@ public class PynqParamController : MonoBehaviour
         instance.SendPreviewWhileDragging();
     }
 
+    public static void NotifyMagnetPositionsChanged()
+    {
+        if (instance == null || PynqConnection.Instance == null) return;
+        if (!instance.slidersResolved) instance.ResolveSliders();
+        instance.SendPreviewWhileDragging();
+    }
+
+    public static void NotifyMagnetPositionsSettled()
+    {
+        if (instance == null) return;
+        if (!instance.slidersResolved) instance.ResolveSliders();
+        instance.previewInFlight = false;
+        instance.previewPending = false;
+        instance.StopPreviewTimeout();
+        instance.slidersDirty = true;
+        instance.SendNow();
+    }
+
     public static void NotifyFssChanged()
     {
         if (instance == null) return;

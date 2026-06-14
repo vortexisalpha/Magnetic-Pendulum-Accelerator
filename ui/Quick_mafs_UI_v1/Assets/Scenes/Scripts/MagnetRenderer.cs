@@ -14,11 +14,15 @@ public class MagnetRenderer : MonoBehaviour
     [SerializeField] private float pollIntervalSeconds = 0.03f;
     [SerializeField] private float pynqSendMinIntervalSeconds = 0.15f;
     [SerializeField] private float pynqSendPositionEpsilon = 0.01f;
+    [SerializeField] private float magnetSettledSeconds = 0.45f;
     [SerializeField] private string flaskURL = "http://35.179.111.223:5000/";
 
     private MagnetPendulumPreview preview;
     private readonly Dictionary<string, Vector2> lastSentMagnetPositions = new Dictionary<string, Vector2>();
+    private readonly Dictionary<string, Vector2> lastObservedMagnetPositions = new Dictionary<string, Vector2>();
     private float lastPynqMagnetSendTime = -1f;
+    private bool hasObservedMagnetPositions;
+    private Coroutine magnetSettledRoutine;
 
     void Start()
     {
@@ -64,6 +68,7 @@ public class MagnetRenderer : MonoBehaviour
 
 
             ApplyInfo(info);
+            TrackMagnetMotion(info.magnets);
 
             // Relay the same magnet positions to the board over TCP so the FPGA
             // basin is computed from what we display.
@@ -78,24 +83,47 @@ public class MagnetRenderer : MonoBehaviour
             preview.UpdateMagnets(info.magnets);
     }
 
+    void TrackMagnetMotion(Dictionary<string, MagnetCoords> magnets)
+    {
+        if (magnets == null)
+            return;
+
+        if (!hasObservedMagnetPositions)
+        {
+            StoreMagnetSnapshot(magnets, lastObservedMagnetPositions);
+            hasObservedMagnetPositions = true;
+            return;
+        }
+
+        if (!HaveMagnetPositionsChanged(magnets, lastObservedMagnetPositions))
+            return;
+
+        StoreMagnetSnapshot(magnets, lastObservedMagnetPositions);
+        PynqParamController.NotifyMagnetPositionsChanged();
+        RestartMagnetSettledTimer();
+    }
+
+    void RestartMagnetSettledTimer()
+    {
+        if (magnetSettledRoutine != null)
+            StopCoroutine(magnetSettledRoutine);
+
+        magnetSettledRoutine = StartCoroutine(NotifyMagnetSettledAfterIdle());
+    }
+
+    IEnumerator NotifyMagnetSettledAfterIdle()
+    {
+        yield return new WaitForSeconds(magnetSettledSeconds);
+        magnetSettledRoutine = null;
+        PynqParamController.NotifyMagnetPositionsSettled();
+    }
+
     bool ShouldSendMagnetsToPynq(Dictionary<string, MagnetCoords> magnets)
     {
         if (magnets == null)
             return false;
 
-        bool changed = magnets.Count != lastSentMagnetPositions.Count;
-        float epsilonSqr = pynqSendPositionEpsilon * pynqSendPositionEpsilon;
-
-        foreach (var magnet in magnets)
-        {
-            Vector2 position = new Vector2(magnet.Value.x, magnet.Value.y);
-            if (!lastSentMagnetPositions.TryGetValue(magnet.Key, out Vector2 lastPosition) ||
-                (position - lastPosition).sqrMagnitude > epsilonSqr)
-            {
-                changed = true;
-                break;
-            }
-        }
+        bool changed = HaveMagnetPositionsChanged(magnets, lastSentMagnetPositions);
 
         if (!changed)
             return false;
@@ -104,11 +132,34 @@ public class MagnetRenderer : MonoBehaviour
             Time.time - lastPynqMagnetSendTime < pynqSendMinIntervalSeconds)
             return false;
 
-        lastSentMagnetPositions.Clear();
-        foreach (var magnet in magnets)
-            lastSentMagnetPositions[magnet.Key] = new Vector2(magnet.Value.x, magnet.Value.y);
-
+        StoreMagnetSnapshot(magnets, lastSentMagnetPositions);
         lastPynqMagnetSendTime = Time.time;
         return true;
+    }
+
+    bool HaveMagnetPositionsChanged(Dictionary<string, MagnetCoords> magnets, Dictionary<string, Vector2> previousPositions)
+    {
+        if (magnets.Count != previousPositions.Count)
+            return true;
+
+        float epsilonSqr = pynqSendPositionEpsilon * pynqSendPositionEpsilon;
+        foreach (var magnet in magnets)
+        {
+            Vector2 position = new Vector2(magnet.Value.x, magnet.Value.y);
+            if (!previousPositions.TryGetValue(magnet.Key, out Vector2 previousPosition) ||
+                (position - previousPosition).sqrMagnitude > epsilonSqr)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static void StoreMagnetSnapshot(Dictionary<string, MagnetCoords> magnets, Dictionary<string, Vector2> snapshot)
+    {
+        snapshot.Clear();
+        foreach (var magnet in magnets)
+            snapshot[magnet.Key] = new Vector2(magnet.Value.x, magnet.Value.y);
     }
 }
