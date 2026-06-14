@@ -141,6 +141,12 @@ def magnet_add():
     x = float(body["x"])
     y = float(body["y"])
 
+    for magnet in mp_data.mag_list:
+        if magnet.uid == uid:
+            magnet.x = x
+            magnet.y = y
+            return {"ok": 200}
+
     mp_data.mag_list.append(Magnet(uid, x, y))
 
     return {"ok": 200}

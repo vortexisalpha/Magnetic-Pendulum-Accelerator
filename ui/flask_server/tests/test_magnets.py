@@ -24,6 +24,21 @@ def test_magnet_add_accepts_multiple_magnets(client):
     assert [magnet.uid for magnet in mp_data.mag_list] == ["marker_1", "marker_2"]
 
 
+def test_magnet_add_updates_existing_uid(client):
+    client.post("/magnet_add", json={"uid": "marker_1", "x": 1.0, "y": 2.0})
+
+    response = client.post(
+        "/magnet_add",
+        json={"uid": "marker_1", "x": 3.0, "y": 4.0},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"ok": 200}
+    assert len(mp_data.mag_list) == 1
+    assert mp_data.mag_list[0].x == 3.0
+    assert mp_data.mag_list[0].y == 4.0
+
+
 def test_magnet_add_coerces_numeric_strings(client):
     client.post("/magnet_add", json={"uid": "marker_1", "x": "40.5", "y": "60.25"})
 
