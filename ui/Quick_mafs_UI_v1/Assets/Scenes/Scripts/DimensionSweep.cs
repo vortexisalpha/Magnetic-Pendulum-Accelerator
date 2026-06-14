@@ -50,7 +50,10 @@ public class DimensionSweep : MonoBehaviour
         var allSeries = new List<DimensionSeries>();
 
         float previousEpsilon = PynqConnection.Instance.Epsilon;
+        bool previousFssMode = PynqConnection.Instance.FssMode;
         PynqConnection.Instance.SetFssMode(true);
+
+        if (plot != null) plot.Render(allSeries, epsilonMin, epsilonMax);
 
         foreach (float b in bValues)
         {
@@ -102,7 +105,8 @@ public class DimensionSweep : MonoBehaviour
         }
 
         PynqConnection.Instance.SetEpsilon(previousEpsilon);
-        PynqConnection.Instance.SetFssMode(false);
+        PynqConnection.Instance.SetFssMode(previousFssMode);
+        PynqParamController.NotifyFssChanged();
         ExportCsv(allSeries);
         if (plot != null) plot.Render(allSeries, epsilonMin, epsilonMax);
         running = false;
