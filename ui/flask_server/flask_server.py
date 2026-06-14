@@ -99,10 +99,7 @@ def construct_mpdata_json(data: MPData) -> str:
     }
 
     for magnet in data.mag_list:
-        if magnet.x < 0 or magnet.y < 0:
-            continue
-
-        payload["magnets"][MAGNET_OUTPUT_KEYS[magnet.uid]] = {
+        payload["magnets"][MAGNET_OUTPUT_KEYS.get(magnet.uid, magnet.uid)] = {
             "x": magnet.x,
             "y": magnet.y,
         }
