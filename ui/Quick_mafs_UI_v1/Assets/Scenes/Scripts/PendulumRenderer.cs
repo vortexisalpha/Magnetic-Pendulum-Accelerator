@@ -12,6 +12,8 @@ public class PendulumRenderer : MonoBehaviour
     [SerializeField] private RawImage settlingTimeImage;
     [SerializeField] private RawImage fssImage;
 
+    [SerializeField] private float fssMapEpsilon = 0.1f;
+
     Color32[] palette = {
                 new Color32(30,30,30,255),
                 new Color32(255,0,0,255),
@@ -19,10 +21,9 @@ public class PendulumRenderer : MonoBehaviour
                 new Color32(0,0,255,255),
             };
 
-    //3D stuff:
     [SerializeField] private MeshFilter mesh3D;
-    [SerializeField] private float heightScale = 0.05f;  // iterations (height)
-    [SerializeField] private float xyScale = 0.5f;   // pixel (spacing)
+    [SerializeField] private float heightScale = 0.05f;
+    [SerializeField] private float xyScale = 0.5f;
 
     private Mesh runtimeMesh;
     private Vector3[] verts3D;
@@ -31,7 +32,6 @@ public class PendulumRenderer : MonoBehaviour
     private int meshW = -1;
     private int meshH = -1;
 
-    // can be 6 bit or 14 bit (currently fpga working on 6 bit)
     static void DecodePixel(int pixel, int bitDepth, out int category, out int depth)
     {
         if (bitDepth <= 6)
@@ -54,18 +54,12 @@ public class PendulumRenderer : MonoBehaviour
 
     void Start()
     {
-        // CHANGE: start with BoA visible, settling-time/FSS hidden.
-        // Each RawImage now has a fixed semantic meaning:
-        // boaImage          = basin of attraction only
-        // settlingTimeImage = settling time only
-        // fssImage          = FSS only
         Set2DMap(0);
 
         if (PynqConnection.Instance != null)
         {
             PynqConnection.Instance.ImageReceived += ApplyImage;
 
-            // Render immediately if a frame already arrived before we subscribed.
             if (PynqConnection.Instance.LatestImage != null)
                 ApplyImage(PynqConnection.Instance.LatestImage);
         }
@@ -123,19 +117,10 @@ public class PendulumRenderer : MonoBehaviour
 
         int depthMax = DepthMax(msg.bitDepth);
 
-        // SHORT-TERM ROUTING:
-        // The message itself does not currently say whether it is normal or FSS.
-        // Therefore, for now, classify the incoming frame using the current FssMode.
-        // This is acceptable for the demo, but the ideal long-term protocol would tag
-        // the image message with its true map type.
         bool incomingImageIsFss = PynqConnection.Instance != null && PynqConnection.Instance.FssMode;
 
         if (incomingImageIsFss)
         {
-            // CHANGE FROM BEFORE:
-            // In FSS mode, do NOT decode/update boaImage or settlingTimeImage.
-            // This prevents an FSS frame from being accidentally interpreted as a
-            // basin-of-attraction or settling-time frame.
             Texture2D texFss = new Texture2D(displaySize, displaySize, TextureFormat.RGBA32, false);
             texFss.filterMode = FilterMode.Point;
 
@@ -144,7 +129,7 @@ public class PendulumRenderer : MonoBehaviour
             for (int sy = 0; sy < displaySize; sy++)
             {
                 int sourceY = Mathf.Min((sy * displaySourceHeight) / displaySize, displaySourceHeight - 1);
-                int dstY = displaySize - sy - 1; // Unity texture buffer y-flip.
+                int dstY = displaySize - sy - 1;
 
                 for (int sx = 0; sx < displaySize; sx++)
                 {
@@ -153,7 +138,6 @@ public class PendulumRenderer : MonoBehaviour
 
                     int bufPos = dstY * displaySize + sx;
 
-                    // FSS-specific decoding/colouring only.
                     fssPixels[bufPos] = FssColorizer.Colorize(pixel);
                 }
             }
@@ -161,17 +145,10 @@ public class PendulumRenderer : MonoBehaviour
             texFss.SetPixels32(fssPixels);
             texFss.Apply();
 
-            // CHANGE FROM BEFORE:
-            // FSS data goes only to fssImage, never to boaImage.
             fssImage.texture = texFss;
         }
         else
         {
-            // Normal mode:
-            // Decode the same normal FPGA frame into two valid visualisations:
-            // 1. basin of attraction from category bits
-            // 2. settling time from depth bits
-
             if (width != meshW || height != meshH)
                 BuildMeshSkeleton(width, height);
 
@@ -185,10 +162,6 @@ public class PendulumRenderer : MonoBehaviour
 
             float depthScale = DepthToWorldScale(msg.bitDepth, heightScale);
 
-            // 3D mesh update remains based on normal basin/settling data only.
-            // CHANGE FROM BEFORE:
-            // The mesh is not recoloured using FSS data, because FSS has different
-            // bit semantics from the normal basin-of-attraction frame.
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
@@ -207,7 +180,7 @@ public class PendulumRenderer : MonoBehaviour
             for (int sy = 0; sy < displaySize; sy++)
             {
                 int sourceY = Mathf.Min((sy * displaySourceHeight) / displaySize, displaySourceHeight - 1);
-                int dstY = displaySize - sy - 1; // Unity texture buffer y-flip.
+                int dstY = displaySize - sy - 1;
 
                 for (int sx = 0; sx < displaySize; sx++)
                 {
@@ -231,13 +204,9 @@ public class PendulumRenderer : MonoBehaviour
             texBoa.Apply();
             texSettling.Apply();
 
-            // CHANGE FROM BEFORE:
-            // BoA image always receives basin-of-attraction texture only.
-            // Settling image always receives settling-time texture only.
             boaImage.texture = texBoa;
             settlingTimeImage.texture = texSettling;
 
-            // 3D mesh update only in normal mode.
             runtimeMesh.vertices = verts3D;
             runtimeMesh.colors32 = vertColors3D;
             runtimeMesh.triangles = tris3D;
@@ -254,19 +223,13 @@ public class PendulumRenderer : MonoBehaviour
     {
         Debug.Log($"Selected 2D map dropdown ID: {dropdownId}");
 
-        // CHANGE FROM BEFORE:
-        // Dropdown now controls visibility only.
-        // Each RawImage has a fixed meaning:
-        // 0 -> boaImage
-        // 1 -> settlingTimeImage
-        // 2 -> fssImage
         SetMapVisibility(dropdownId);
 
-        // CHANGE FROM BEFORE:
-        // FSS mode is only used to tell PYNQ what to compute.
-        // It no longer changes what boaImage means.
         bool shouldUseFssMode = dropdownId == 2;
         bool currentlyFssMode = PynqConnection.Instance != null && PynqConnection.Instance.FssMode;
+
+        if (shouldUseFssMode)
+            PynqConnection.Instance?.SetEpsilon(fssMapEpsilon);
 
         if (shouldUseFssMode != currentlyFssMode)
         {
@@ -277,10 +240,6 @@ public class PendulumRenderer : MonoBehaviour
 
     private void SetMapVisibility(int dropdownId)
     {
-        // CHANGE:
-        // All three layers occupy the same size and position. Only one is active at a time.
-        // IDs 3 and 4 are valid 3D views handled by other managers.
-        // Therefore, all 2D RawImages are hidden for those options.
         if (boaImage != null)
             boaImage.gameObject.SetActive(dropdownId == 0);
 

@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.UI;
 
 public class ViewManager : MonoBehaviour
 {
@@ -9,12 +8,15 @@ public class ViewManager : MonoBehaviour
     [SerializeField] private GameObject panZoomController;
 
     [Header("Potential view")]
-    [Tooltip("Canvas that hosts the potential surface RawImage.")]
     [SerializeField] private GameObject potentialCanvas;
-    [Tooltip("Canvas the runtime 'Potential' button is parented to (e.g. canvas3DOverlay).")]
-    [SerializeField] private RectTransform potentialButtonParent;
-    [SerializeField] private Vector2 potentialButtonSize = new Vector2(120f, 36f);
-    [SerializeField] private Vector2 potentialButtonMargin = new Vector2(6f, 48f);
+
+    [Header("Uncertainty view")]
+    [SerializeField] private GameObject uncertaintyCanvas;
+    [SerializeField] private DimensionSweep dimensionSweep;
+    [SerializeField] private GameObject latencyStatsUI;
+
+    [Header("Map dropdown routing")]
+    [SerializeField] private PendulumRenderer pendulumRenderer;
 
     void Start()
     {
@@ -27,6 +29,8 @@ public class ViewManager : MonoBehaviour
         mainCanvas.SetActive(true);
         canvas3DOverlay.SetActive(false);
         if (potentialCanvas != null) potentialCanvas.SetActive(false);
+        if (uncertaintyCanvas != null) uncertaintyCanvas.SetActive(false);
+        if (latencyStatsUI != null) latencyStatsUI.SetActive(true);
         panZoomController.SetActive(true);
         orbitCamera.enabled = false;
     }
@@ -36,6 +40,7 @@ public class ViewManager : MonoBehaviour
         mainCanvas.SetActive(false);
         canvas3DOverlay.SetActive(true);
         if (potentialCanvas != null) potentialCanvas.SetActive(false);
+        if (uncertaintyCanvas != null) uncertaintyCanvas.SetActive(false);
         panZoomController.SetActive(false);
         orbitCamera.enabled = true;
     }
@@ -45,40 +50,35 @@ public class ViewManager : MonoBehaviour
         mainCanvas.SetActive(false);
         canvas3DOverlay.SetActive(false);
         if (potentialCanvas != null) potentialCanvas.SetActive(true);
+        if (uncertaintyCanvas != null) uncertaintyCanvas.SetActive(false);
         panZoomController.SetActive(false);
         orbitCamera.enabled = false;
     }
 
-    private void BuildPotentialButton()
+    public void OnMapDropdownChanged(int index)
     {
-        if (potentialButtonParent == null)
+        switch (index)
         {
-            Debug.LogWarning("[ViewManager] potentialButtonParent not assigned; Potential button not built.");
-            return;
+            case 3: ShowPotential(); break;
+            case 4: Show3D(); break;
+            case 5: ShowUncertainty(); break;
+            default:
+                Show2D();
+                if (pendulumRenderer != null) pendulumRenderer.Set2DMap(index);
+                break;
         }
+    }
 
-        var go = new GameObject("PotentialButton", typeof(Image), typeof(Button));
-        var rt = go.GetComponent<RectTransform>();
-        rt.SetParent(potentialButtonParent, false);
-        rt.sizeDelta = potentialButtonSize;
-        rt.anchorMin = rt.anchorMax = new Vector2(1f, 0f);
-        rt.pivot = new Vector2(1f, 0f);
-        rt.anchoredPosition = new Vector2(-potentialButtonMargin.x, potentialButtonMargin.y);
+    public void ShowUncertainty()
+    {
+        mainCanvas.SetActive(false);
+        canvas3DOverlay.SetActive(false);
+        if (potentialCanvas != null) potentialCanvas.SetActive(false);
+        if (uncertaintyCanvas != null) uncertaintyCanvas.SetActive(true);
+        if (latencyStatsUI != null) latencyStatsUI.SetActive(false);
+        panZoomController.SetActive(false);
+        orbitCamera.enabled = false;
 
-        go.GetComponent<Image>().color = new Color(0.1f, 0.1f, 0.1f, 0.85f);
-        go.GetComponent<Button>().onClick.AddListener(ShowPotential);
-
-        var labelGo = new GameObject("Label", typeof(Text));
-        var label = labelGo.GetComponent<Text>();
-        label.rectTransform.SetParent(rt, false);
-        label.rectTransform.anchorMin = Vector2.zero;
-        label.rectTransform.anchorMax = Vector2.one;
-        label.rectTransform.offsetMin = Vector2.zero;
-        label.rectTransform.offsetMax = Vector2.zero;
-        label.text = "Potential";
-        label.alignment = TextAnchor.MiddleCenter;
-        label.color = Color.white;
-        label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        label.fontSize = Mathf.RoundToInt(potentialButtonSize.y * 0.45f);
+        if (dimensionSweep != null) dimensionSweep.StartSweep();
     }
 }

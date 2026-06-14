@@ -90,6 +90,9 @@ public class PynqConnection : MonoBehaviour
 
     public void SetFssMode(bool on) => FssMode = on;
 
+    public float Epsilon { get; private set; } = 0.1f;
+    public void SetEpsilon(float e) => Epsilon = e;
+
     public int LatestSentParamVersion { get; private set; }
 
     public int MinAcceptedImageVersion { get; private set; }
@@ -250,6 +253,7 @@ public class PynqConnection : MonoBehaviour
             pendulumLength,
             pendulumHeight,
             fss,
+            epsilon = Epsilon,
             resX,
             resY
         });
