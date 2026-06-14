@@ -32,15 +32,15 @@ public class TrajectoryRenderer : MonoBehaviour
 
 
     [Header("Playback")]
-    [SerializeField] private Slider trajectorySlider; 
+    [SerializeField] private Slider trajectorySlider;
 
     [Header("Moving Marker")]
     [SerializeField] private float markerSize = 14f;
-    [SerializeField] private Color markerColour = Color.black; 
+    [SerializeField] private Color markerColour = Color.black;
 
     private RawImage markerImage;
 
-    private Texture2D markerTexture; 
+    private Texture2D markerTexture;
 
     private RectTransform canvasRoot;
     private RawImage overlayImage;
@@ -72,20 +72,27 @@ public class TrajectoryRenderer : MonoBehaviour
             PynqConnection.Instance.TrajectoryReceived -= OnTrajectoryReceived;
     }
 
+    void OnDisable()
+    {
+        // Ensure the overlay and related UI are hidden when this component
+        // or its GameObject is deactivated.
+        SetVisible(false);
+    }
+
     void Update()
     {
         //repaint live if the image toggle flips while a trajectory is on screen
         if (imageToggle != null && imageToggle.isOn != lastImageToggleOn &&
             overlayImage != null && overlayImage.gameObject.activeSelf)
         {
-    
+
             int count = trajectorySlider != null
                 ? Mathf.RoundToInt(trajectorySlider.value)
                 : (storedPoints != null ? storedPoints.Length : 0);
             DrawSlice(count);
         }
     }
-    
+
 
     private void OnTrajectoryReceived(TrajectoryMessage msg)
     {
@@ -100,9 +107,18 @@ public class TrajectoryRenderer : MonoBehaviour
             return;
         }
 
+        // If the display image isn't active we explicitly ignore the incoming
+        // trajectory — do not store it or show the overlay. This prevents a
+        // trajectory requested via a different image from appearing later when
+        // this display is re-enabled.
+        if (displayImage == null || !displayImage.gameObject.activeInHierarchy)
+        {
+            Debug.Log("[Trajectory] displayImage inactive; ignoring received trajectory.");
+            return;
+        }
+
         storedPoints = msg.points;
 
-        
         if (storedPoints == null || storedPoints.Length == 0)
         {
             Debug.LogWarning("[Trajectory] received 0 points; nothing to draw.");
@@ -118,33 +134,32 @@ public class TrajectoryRenderer : MonoBehaviour
             trajectorySlider.onValueChanged.AddListener(OnSliderChanged);
         }
 
-
         DrawSlice(storedPoints.Length);
         SetVisible(true);
     }
 
     private void OnSliderChanged(float value)
     {
-        if(storedPoints == null){ return; }
-        DrawSlice(Mathf.RoundToInt(value)); 
+        if (storedPoints == null) { return; }
+        DrawSlice(Mathf.RoundToInt(value));
     }
 
     private void DrawSlice(int count)
     {
-        if (storedPoints == null) return; 
+        if (storedPoints == null) return;
         count = Mathf.Clamp(count, 1, storedPoints.Length);
 
         var view = new TrajectoryTexturePainter.Viewport
         {
-        xMin = -1.8f,
-        yMin = -1.8f,
-        xMax = 1.8f,
-        yMax = 1.8f 
+            xMin = -1.8f,
+            yMin = -1.8f,
+            xMax = 1.8f,
+            yMax = 1.8f
 
         };
 
-        if( panZoom != null) 
-        panZoom.GetViewportBounds(out view.xMin, out view.xMax, out view.yMin, out view.yMax);
+        if (panZoom != null)
+            panZoom.GetViewportBounds(out view.xMin, out view.xMax, out view.yMin, out view.yMax);
 
         if (count > 0)
             Debug.Log($"[Trajectory] drawing {count}/{storedPoints.Length} pts, " +
@@ -153,35 +168,35 @@ public class TrajectoryRenderer : MonoBehaviour
 
         lastImageToggleOn = imageToggle == null || imageToggle.isOn;
         Color start = lastImageToggleOn ? startColor : Color.white;
-        Color end   = lastImageToggleOn ? endColor   : Color.white;
+        Color end = lastImageToggleOn ? endColor : Color.white;
 
         var slice = new Vector2[count];
         Array.Copy(storedPoints, slice, count);
 
         TrajectoryTexturePainter.Paint(overlayTexture, slice, view, start, end, lineThickness);
         AlignOverlay();
-        
+
         MoveMarkerToPoint(storedPoints[count - 1], view);
 
     }
 
     private void MoveMarkerToPoint(Vector2 point, TrajectoryTexturePainter.Viewport view)
     {
-       if (markerImage == null || overlayImage == null) return; 
+        if (markerImage == null || overlayImage == null) return;
 
-       RectTransform overlayRt = overlayImage.rectTransform; 
-       RectTransform markerRt = markerImage.rectTransform; 
+        RectTransform overlayRt = overlayImage.rectTransform;
+        RectTransform markerRt = markerImage.rectTransform;
 
-       float u = Mathf.InverseLerp(view.xMin, view.xMax, point.x); 
-       float v = Mathf.InverseLerp(view.yMin, view.yMax, point.y);
+        float u = Mathf.InverseLerp(view.xMin, view.xMax, point.x);
+        float v = Mathf.InverseLerp(view.yMin, view.yMax, point.y);
 
-       float localX = (u - 0.5f) * overlayRt.sizeDelta.x;
-       float localY = (v - 0.5f) * overlayRt.sizeDelta.y;
-       
-       markerRt.anchorMin = markerRt.anchorMax = new Vector2(0.5f, 0.5f);
-       markerRt.pivot = new Vector2(0.5f, 0.5f);
-       
-       markerRt.anchoredPosition = overlayRt.anchoredPosition + new Vector2(localX, localY);
+        float localX = (u - 0.5f) * overlayRt.sizeDelta.x;
+        float localY = (v - 0.5f) * overlayRt.sizeDelta.y;
+
+        markerRt.anchorMin = markerRt.anchorMax = new Vector2(0.5f, 0.5f);
+        markerRt.pivot = new Vector2(0.5f, 0.5f);
+
+        markerRt.anchoredPosition = overlayRt.anchoredPosition + new Vector2(localX, localY);
 
     }
 
@@ -223,10 +238,10 @@ public class TrajectoryRenderer : MonoBehaviour
         markerTexture = MakeCircleTexture(64, markerColour);
 
         var markerGo = new GameObject("TrajectoryMarker", typeof(RawImage));
-        markerImage = markerGo.GetComponent<RawImage>(); 
-        markerImage.rectTransform.SetParent(canvasRoot, false); 
+        markerImage = markerGo.GetComponent<RawImage>();
+        markerImage.rectTransform.SetParent(canvasRoot, false);
         markerImage.texture = markerTexture;
-        markerImage.raycastTarget = false; 
+        markerImage.raycastTarget = false;
         markerImage.rectTransform.sizeDelta = new Vector2(markerSize, markerSize);
     }
 
@@ -235,20 +250,20 @@ public class TrajectoryRenderer : MonoBehaviour
         Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
         tex.filterMode = FilterMode.Bilinear;
 
-        Vector2 centre =  new Vector2(size / 2f, size / 2f);
-        float radius = size / 2f; 
-        
+        Vector2 centre = new Vector2(size / 2f, size / 2f);
+        float radius = size / 2f;
 
-        for(int y = 0; y < size; y++)
+
+        for (int y = 0; y < size; y++)
         {
-            for(int x = 0; x < size; x++)
+            for (int x = 0; x < size; x++)
             {
                 float dist = Vector2.Distance(new Vector2(x, y), centre);
                 tex.SetPixel(x, y, dist <= radius ? color : Color.clear);
             }
         }
         tex.Apply();
-        return tex; 
+        return tex;
     }
 
     private void BuildCloseButton()
@@ -276,7 +291,7 @@ public class TrajectoryRenderer : MonoBehaviour
     private void AlignOverlay()
     {
         var corners = new Vector3[4];
-        displayImage.rectTransform.GetWorldCorners(corners); 
+        displayImage.rectTransform.GetWorldCorners(corners);
         Vector2 bottomLeft = WorldToCanvas(corners[0]);
         Vector2 topLeft = WorldToCanvas(corners[1]);
         Vector2 topRight = WorldToCanvas(corners[2]);

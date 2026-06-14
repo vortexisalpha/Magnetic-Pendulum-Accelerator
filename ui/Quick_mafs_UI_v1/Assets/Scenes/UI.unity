@@ -269,6 +269,7 @@ GameObject:
   - component: {fileID: 38845506}
   - component: {fileID: 38845505}
   - component: {fileID: 38845507}
+  - component: {fileID: 38845508}
   m_Layer: 5
   m_Name: BoAImage
   m_TagString: Untagged
@@ -342,6 +343,31 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f25518428f84c994da706b14f9bef2e0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrajectoryClicker
+--- !u!114 &38845508
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 38845503}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5597cbee576c1da4195973792b156879, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TrajectoryRenderer
+  displayImage: {fileID: 38845505}
+  panZoom: {fileID: 1151704949}
+  imageToggle: {fileID: 0}
+  overlayResolution: 512
+  startColor: {r: 1, g: 1, b: 1, a: 1}
+  endColor: {r: 1, g: 1, b: 1, a: 1}
+  lineThickness: 3
+  closeButtonSize: {x: 36, y: 36}
+  closeButtonMargin: {x: 6, y: 6}
+  closeButtonColor: {r: 0.1, g: 0.1, b: 0.1, a: 0.85}
+  trajectorySlider: {fileID: 450200142}
+  markerSize: 14
+  markerColour: {r: 0, g: 0, b: 0, a: 1}
 --- !u!1 &43731859
 GameObject:
   m_ObjectHideFlags: 0
@@ -6002,7 +6028,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1930109278}
   - component: {fileID: 1930109277}
-  - component: {fileID: 1930109279}
   - component: {fileID: 1930109280}
   m_Layer: 0
   m_Name: PynqConnection
@@ -6042,31 +6067,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1930109279
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1930109276}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5597cbee576c1da4195973792b156879, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::TrajectoryRenderer
-  displayImage: {fileID: 38845505}
-  panZoom: {fileID: 1151704949}
-  imageToggle: {fileID: 0}
-  overlayResolution: 512
-  startColor: {r: 0, g: 1, b: 1, a: 1}
-  endColor: {r: 1, g: 0, b: 1, a: 1}
-  lineThickness: 4
-  closeButtonSize: {x: 36, y: 36}
-  closeButtonMargin: {x: 6, y: 6}
-  closeButtonColor: {r: 0.1, g: 0.1, b: 0.1, a: 0.85}
-  trajectorySlider: {fileID: 450200142}
-  markerSize: 14
-  markerColour: {r: 0, g: 0, b: 0, a: 1}
 --- !u!114 &1930109280
 MonoBehaviour:
   m_ObjectHideFlags: 0
