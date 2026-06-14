@@ -1,8 +1,8 @@
 // Overall 12 lanes - 2048x1080 (DCI 2K) band-streaming build
 // The full max 2K frame (2048*1080*6 = 12.6 Mbit) does not fit in the PYNQ-Z1's
-// 4.9 Mbit of BRAM, instead the image is divided into horizontal bands, everytime a band
-// gets passed into the 12 lanes, once computation done for band advances to next,
-// preserves BRAM usage while still outputting the 32-bit words in raster order
+// 4.9 Mbit of BRAM, instead the frame is divided into horizontal bands, every time a band
+// gets passed into the 12 lanes. Once computation done for band advances to next.
+// Limits BRAM usage, outputs the 32-bit words in raster order
 module pixel_generator(
     input           out_stream_aclk,
     input           s_axi_lite_aclk,
@@ -40,7 +40,7 @@ parameter  REG_FILE_SIZE       = 64;
 localparam REG_FILE_AWIDTH     = $clog2(REG_FILE_SIZE);
 parameter  AXI_LITE_ADDR_WIDTH = 8;
 
-// derived resolution params (auto-scale with MAX_IMG_W/MAX_IMG_H)
+// derived resolution params (auto-scale with MAX_IMG_W, MAX_IMG_H)
  parameter  NUM_LANES   = 12;
   localparam TOTAL_PIX   = MAX_IMG_W * MAX_IMG_H;
   localparam PXID_W      = $clog2(TOTAL_PIX);
@@ -54,16 +54,16 @@ parameter  AXI_LITE_ADDR_WIDTH = 8;
 //   BAND_ROWS: image rows each lane buffers per band
 //   BAND_H: image rows advanced per band (all lanes together)
 //   NBANDS: number of bands per frame
-//   BAND_PIX: pixels in one lane, i.e. total number of pixels shared between 12 lanes
+//   BAND_PIX: pixels in one lane per band (BAND_TOTAL / 12)
 //   BAND_TOTAL: pixels per band
 // -------------------------------------------------------------------------
 localparam BAND_ROWS      = 5;
 localparam BAND_H         = NUM_LANES * BAND_ROWS;
-localparam BAND_TOTAL_MAX = NUM_LANES * BAND_H * MAX_IMG_W; // max pixels per band (all lanes)
+localparam BAND_TOTAL_MAX = NUM_LANES * BAND_H * MAX_IMG_W;  // max pixels per band (all lanes)
 localparam NBANDS_MAX     = MAX_IMG_H / BAND_H;  // max number of bands per frame
 localparam BAND_LOCAL_W   = $clog2(BAND_ROWS * MAX_IMG_W);  // addr width of one lane's band buffer
-localparam BAND_POS_W     = $clog2(BAND_TOTAL_MAX);  // width for pixel osition in band
-localparam BAND_CNT_W     = (NBANDS_MAX > 1) ? $clog2(NBANDS_MAX) : 1; // width for band index
+localparam BAND_POS_W     = $clog2(BAND_TOTAL_MAX);  // width for pixel position in band
+localparam BAND_CNT_W     = (NBANDS_MAX > 1) ? $clog2(NBANDS_MAX) : 1;  // width for band index
 
 // elaboration-time checks
 initial begin
@@ -158,7 +158,7 @@ assign s_axi_lite_wready  = (writeState == AWAIT_WADD_AND_DATA || writeState == 
 assign s_axi_lite_bvalid  = (writeState == AWAIT_RESP);
 assign s_axi_lite_bresp   = (writeAddr < REG_FILE_SIZE) ? AXI_OK : AXI_ERR;
 
-// -------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------
 // Register map (Q4.14):
 //  [0]  control (bit[0]=start)   [1] x_min  [2] y_min  [3] x_step  [4] y_step
 //  [5..10] mag0..2 x/y           [11] gamma [12] omega2 [13] h2
@@ -170,21 +170,21 @@ assign s_axi_lite_bresp   = (writeAddr < REG_FILE_SIZE) ? AXI_OK : AXI_ERR;
 //  [33] band_pix ( = BAND_ROWS * img_w) [34] nbands (= img_h / BAND_H)
 // trajectory inputs: [21] traj_px_id  [22] traj_rd_addr
 // trajectory readback: [23] traj_x [24] traj_y [25] traj_len [26] traj_done [27] traj_wr_addr
-// -------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------
 
 wire start_w = reg_file[0][0];
 
 //mag_active extract
 wire [2:0] mag_active = reg_file[30][2:0];
 
-// resolution inputs (must equal MAX_IMG_W / MAX_IMG_H for this build)
+// resolution inputs
 wire [DIM_W-1:0]  img_w_w = reg_file[31][DIM_W-1:0];
 wire [DIM_W-1:0]  img_h_w = reg_file[32][DIM_W-1:0];
 wire [PXID_W-1:0] band_pix_w = reg_file[33][PXID_W-1:0];
 wire [PXID_W-1:0] nbands_w = reg_file[34][PXID_W-1:0];
 
 wire [PXID_W-1:0] band_total;
-assign band_total = NUM_LANES * band_pix_w;   // runtime: 12 * band_pix (const-coeff, no DSP)
+assign band_total = NUM_LANES * band_pix_w;   // 12 * band_pix (const, no DSP)
 
 // -------------------------------------------------------------------------
 // 12 lane instances
@@ -262,7 +262,7 @@ wire band_done_all = band_done_0 & band_done_1 & band_done_2 & band_done_3
 reg  frame_done_latch = 1'b0;   // whole frame streamed out (debug readback at reg 20)
 
 // -------------------------------------------------------------------------
-// trajectory capture
+// Trajectory capture
 // -------------------------------------------------------------------------
 reg signed [17:0] traj_x_sel, traj_y_sel;
 always @(*) begin
@@ -289,8 +289,8 @@ assign traj_done_any = traj_done_0 | traj_done_1 | traj_done_2 | traj_done_3 |
                        traj_done_4 | traj_done_5 | traj_done_6 | traj_done_7 |
                        traj_done_8 | traj_done_9 | traj_done_10 | traj_done_11;
 
-reg [11:0] traj_wr_addr;     // current write address = number of points so far
-reg [11:0] traj_len;         // total steps
+reg [11:0] traj_wr_addr;     // current write address
+reg [11:0] traj_len;         // total trajectory steps
 reg        traj_done_latch;
 
 always @(posedge out_stream_aclk) begin
@@ -432,8 +432,7 @@ always @(posedge out_stream_aclk) begin
             if (bpos == 2'd3) begin
                 out_word_r <= {{2'b0, fb_rd_data}, wbuf};
                 out_vld_r  <= 1'b1;
-                // last word if it is the last word of the last band
-                out_lst_r  <= (cur_band == nbands_w-1) && (px_in_band == band_total-1);
+                out_lst_r  <= (cur_band == nbands_w-1) && (px_in_band == band_total-1);  // detects last word of the last band
                 bpos       <= 0;
                 ps         <= PS_SEND;
             end else begin
