@@ -2,9 +2,9 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 
-//attach to a pendulum display RawImage (categoryImage / valueImage). clicking a
-//pixel converts the hit point into the board's row-major pixel id and asks for
-//its trajectory via 0x04 traj_req.
+//attach to a pendulum display RawImage (categoryImage / valueImage). double
+//clicking a pixel converts the hit point into the board's row-major pixel id and
+//asks for its trajectory via 0x04 traj_req.
 [RequireComponent(typeof(RawImage))]
 public class TrajectoryClicker : MonoBehaviour, IPointerClickHandler
 {
@@ -17,7 +17,10 @@ public class TrajectoryClicker : MonoBehaviour, IPointerClickHandler
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        Debug.Log($"[Trajectory] image clicked at screen {eventData.position}");
+        if (eventData.clickCount != 2)
+            return;
+
+        Debug.Log($"[Trajectory] image double-clicked at screen {eventData.position}");
         var conn = PynqConnection.Instance;
         if (conn == null || conn.LatestImage == null)
         {
