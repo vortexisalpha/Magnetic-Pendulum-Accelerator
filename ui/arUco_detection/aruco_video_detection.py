@@ -63,6 +63,29 @@ registered_marker_ids: set[int] = set()
 # Only markers currently in registered_marker_ids appear here.
 missing_frame_counts: dict[int, int] = {}
 
+# =============================================================================
+# Performance measurement
+# =============================================================================
+# Cumulative per-stage latencies (seconds). Keys are the 7 pipeline stages.
+cumulative_latencies: dict[str, float] = {
+    "detect_markers": 0.0,
+    "find_centres": 0.0,
+    "extract_board_and_tokens": 0.0,
+    "compute_homography": 0.0,
+    "transform_tokens": 0.0,
+    "sync_flask": 0.0,
+    "annotate_and_warp": 0.0,
+}
+
+# Number of frames processed (used to compute averages on exit)
+frame_count: int = 0
+
+# Additional runtime timers (measuring calls in main loop)
+cumulative_latencies.setdefault("process_frame_call", 0.0)
+cumulative_latencies.setdefault("annotate_fps_call", 0.0)
+cumulative_latencies.setdefault("imshow_frame", 0.0)
+cumulative_latencies.setdefault("imshow_warped", 0.0)
+
 
 # =============================================================================
 # Network I/O
@@ -203,10 +226,13 @@ def detect_aruco_markers(
 ) -> tuple[list, Optional[np.ndarray]]:
     """
     Pure-ish vision function.
-    Converts frame to greyscale and detects ArUco markers.
+    Converts frame to greyscale, downsizes, detects ArUco markers and scales up the corner pixel coordinates.
     """
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    corners, marker_ids, _ = detector.detectMarkers(gray)
+    small = cv2.resize(gray, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
+    corners, marker_ids, _ = detector.detectMarkers(small)
+    for corner in corners:
+        corner *= 4
     return corners, marker_ids
 
 
@@ -383,7 +409,7 @@ def make_warped_debug_view(frame: np.ndarray, H_view: np.ndarray) -> np.ndarray:
 def process_frame(
     frame: np.ndarray,
     detector: cv2.aruco.ArucoDetector,
-) -> np.ndarray:
+) -> tuple[np.ndarray, dict]:
     """
     Orchestrates the per-frame pipeline:
       1. Detect ArUco markers
@@ -394,40 +420,75 @@ def process_frame(
       6. Sync magnet state to Flask dynamically
       7. Annotate frame and return warped debug view
     """
+    # Prepare per-stage timers
+    stage_times = {
+        "detect_markers": 0.0,
+        "find_centres": 0.0,
+        "extract_board_and_tokens": 0.0,
+        "compute_homography": 0.0,
+        "transform_tokens": 0.0,
+        "sync_flask": 0.0,
+        "annotate_and_warp": 0.0,
+    }
+
+    # Stage 1: detection
+    t0 = perf_counter()
     corners, marker_ids = detect_aruco_markers(frame, detector)
+    if corners and marker_ids is not None:
+        cv2.aruco.drawDetectedMarkers(frame, corners, marker_ids)
+    t1 = perf_counter()
+    stage_times["detect_markers"] = t1 - t0
 
+    # If no markers, still sync with empty detection set and return
     if not corners or marker_ids is None:
-        # No markers at all — run the sync with empty detections so missing
-        # frame counters still increment for any registered magnets
         sync_magnets_to_flask({})
-        return frame
+        return frame, stage_times
 
-    cv2.aruco.drawDetectedMarkers(frame, corners, marker_ids)
-
+    # Stage 2: find centres
+    t0 = perf_counter()
     centres = find_marker_centres(corners, marker_ids)
-    annotate_marker_centres(frame, centres)
+    t1 = perf_counter()
+    stage_times["find_centres"] = t1 - t0
 
+    # Stage 3: extract board corners and token centres
+    t0 = perf_counter()
     board_corners_pos, detected_mag_centres_px = extract_board_and_tokens(centres)
+    t1 = perf_counter()
+    stage_times["extract_board_and_tokens"] = t1 - t0
 
+    # Stage 4: compute homography
+    t0 = perf_counter()
     homographies = compute_homographies(board_corners_pos)
+    t1 = perf_counter()
+    stage_times["compute_homography"] = t1 - t0
 
     if homographies is None:
         print("Not all board corners detected — skipping homography and magnet sync.")
-        # Don't sync magnets this frame: without a valid homography we cannot
-        # compute simulation coordinates, so we hold all last positions on Flask.
-        return frame
+        return frame, stage_times
 
     H_sim, H_view = homographies
 
-    # Transform pixel-space magnet centres to simulation coordinates
+    # Stage 5: transform token centres to simulation coords
+    t0 = perf_counter()
     detected_mag_centres_sim = transform_mag_centres(detected_mag_centres_px, H_sim)
+    t1 = perf_counter()
+    stage_times["transform_tokens"] = t1 - t0
 
-    # Sync the detected simulation positions to Flask dynamically
+    # Stage 6: sync to Flask
+    t0 = perf_counter()
     sync_magnets_to_flask(detected_mag_centres_sim)
+    t1 = perf_counter()
+    stage_times["sync_flask"] = t1 - t0
 
+    # Stage 7: annotation + warped debug view
+    t0 = perf_counter()
+    annotate_marker_centres(frame, centres)
     annotate_mapped_mags_pos(frame, detected_mag_centres_px, detected_mag_centres_sim)
+    warped = make_warped_debug_view(frame, H_view)
+    t1 = perf_counter()
+    stage_times["annotate_and_warp"] = t1 - t0
 
-    return make_warped_debug_view(frame, H_view)
+    return warped, stage_times
 
 
 # =============================================================================
@@ -447,24 +508,53 @@ def stream_webcam_with_aruco(
     if not cap.isOpened():
         raise RuntimeError(f"Could not open camera with index {camera_index}.")
 
-    prev_time = perf_counter()
-
+    prev_time = -1
+    fps = 0
+    i = 0
+    averageFPS = 0
     try:
         while True:
             ret, frame = cap.read()
             if not ret:
                 print("Failed to grab frame from camera; exiting.", file=sys.stderr)
                 break
-
             now = perf_counter()
-            fps = 1.0 / (now - prev_time)
+            if(prev_time != -1):
+                fps = 1.0 / (now - prev_time)
+                i+=1
+                averageFPS = (averageFPS*(i-1)+fps)/i
             prev_time = now
 
-            warped_frame = process_frame(frame, detector)
-            annotate_fps(frame, fps)
+            # Time the entire process_frame call
+            t_pf0 = perf_counter()
+            warped_frame, stage_times = process_frame(frame, detector)
+            t_pf1 = perf_counter()
+            proc_time = t_pf1 - t_pf0
 
+            # Aggregate per-stage latencies
+            global frame_count
+            frame_count += 1
+            for name, val in stage_times.items():
+                cumulative_latencies[name] = cumulative_latencies.get(name, 0.0) + float(val)
+            cumulative_latencies["process_frame_call"] += proc_time
+
+            # Time annotate_fps
+            t_a0 = perf_counter()
+            annotate_fps(frame, fps)
+            t_a1 = perf_counter()
+            cumulative_latencies["annotate_fps_call"] += (t_a1 - t_a0)
+
+            # Time imshow for the main frame
+            t_i0 = perf_counter()
             cv2.imshow(window_name_1, frame)
+            t_i1 = perf_counter()
+            cumulative_latencies["imshow_frame"] += (t_i1 - t_i0)
+
+            # Time imshow for the warped view
+            t_i0 = perf_counter()
             cv2.imshow(window_name_2, warped_frame)
+            t_i1 = perf_counter()
+            cumulative_latencies["imshow_warped"] += (t_i1 - t_i0)
 
             key = cv2.waitKey(1) & 0xFF
             if key in (ord("q"), 27):
@@ -473,6 +563,15 @@ def stream_webcam_with_aruco(
     finally:
         cap.release()
         cv2.destroyAllWindows()
+        print(f"Average framerate: {averageFPS}")
+
+        # Output average per-stage latencies
+        if frame_count > 0:
+            print("Average per-stage latencies (seconds):")
+            for name, total in cumulative_latencies.items():
+                print(f"  {name}: {total / frame_count:.6f}")
+        else:
+            print("No frames processed; no latency data available.")
 
 
 # =============================================================================
