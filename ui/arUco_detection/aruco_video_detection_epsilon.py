@@ -1,4 +1,6 @@
 import sys
+from dataclasses import dataclass
+
 import cv2
 import numpy as np
 from time import perf_counter
@@ -49,19 +51,38 @@ MAGNET_IDS = {4, 5, 6}
 # noise or brief occlusion.
 MISSING_FRAME_THRESHOLD = 5
 
+# v3 latency optimisation: only send /magnet_update_position if the measured
+# marker position has moved by more than this amount in simulation coordinates.
+# The board range is roughly [-1.8, 1.8], so 0.02 is a small deadband. Tune this
+# based on your observed ArUco jitter and acceptable responsiveness.
+POSITION_EPSILON = 0.02
+POSITION_EPSILON_SQ = POSITION_EPSILON * POSITION_EPSILON
+
 
 # =============================================================================
 # Dynamic magnet state
 # =============================================================================
 
-# Tracks which marker IDs are currently registered with Flask.
-# Used to avoid duplicate /magnet_add calls and to detect disappearances.
-registered_marker_ids: set[int] = set()
+@dataclass
+class MagnetTrackState:
+    """
+    Client-side state for one magnet marker synchronised with Flask.
 
-# Counts how many consecutive frames each registered marker has been absent.
-# Key: marker ID. Value: consecutive missing frame count.
-# Only markers currently in registered_marker_ids appear here.
-missing_frame_counts: dict[int, int] = {}
+    last_sent_pos is the last position that Flask has actually accepted, not
+    merely the latest detected position. Comparing new detections against this
+    value ensures small frame-to-frame jitter does not gradually drift the
+    reference without ever notifying Flask.
+    """
+    last_sent_pos: tuple[float, float]
+    missing_frames: int = 0
+
+
+# v3 lifecycle refactor: one dictionary now owns all per-magnet sync state.
+# A marker ID existing in tracked_magnets means it is registered on Flask.
+# This replaces the older parallel registered_marker_ids set and
+# missing_frame_counts dict, avoiding the risk of keeping multiple containers
+# manually synchronised.
+tracked_magnets: dict[int, MagnetTrackState] = {}
 
 # =============================================================================
 # Performance measurement
@@ -147,72 +168,118 @@ def flask_magnet_update(marker_id: int, x: float, y: float) -> bool:
     })
 
 
+def _position_changed_enough(
+    current_pos: tuple[float, float],
+    last_sent_pos: tuple[float, float],
+) -> bool:
+    """
+    Pure helper.
+    Returns True when the marker has moved far enough in simulation coordinates
+    to justify a Flask update.
+
+    v3 latency optimisation: compare squared distance instead of using sqrt.
+    This avoids small jitter triggering redundant synchronous HTTP POSTs.
+    """
+    dx = current_pos[0] - last_sent_pos[0]
+    dy = current_pos[1] - last_sent_pos[1]
+    return (dx * dx + dy * dy) > POSITION_EPSILON_SQ
+
+
 def sync_magnets_to_flask(detected_mag_centres: dict[int, tuple[float, float]]) -> None:
     """
     Side-effect function.
     The main dynamic magnet sync logic. Called every frame after homography mapping.
 
-    Compares the currently detected magnet set against the registered set and:
-      - Adds newly appeared magnets to Flask
-      - Updates positions of already-registered magnets
-      - Increments missing frame counters for absent magnets
-      - Removes magnets that have been absent for more than MISSING_FRAME_THRESHOLD frames
+    v3 latency optimisation:
+      - New marker: POST /magnet_add, then store its last Flask-sent position.
+      - Existing marker: only POST /magnet_update_position if movement exceeds
+        POSITION_EPSILON.
+      - Static/jittering marker: do not POST; hold Flask at last_sent_pos.
+      - Missing marker: increment missing_frames and POST /magnet_remove after
+        MISSING_FRAME_THRESHOLD frames.
 
-    detected_mag_centres: dict mapping marker_id -> (sim_x, sim_y) for
-                          all magnet markers visible this frame.
+    detected_mag_centres maps marker_id -> (sim_x, sim_y) for all visible magnet
+    markers this frame.
     """
     currently_detected_ids = set(detected_mag_centres.keys())
 
     # --- Handle detected markers ---
-    for marker_id, (sim_x, sim_y) in detected_mag_centres.items():
+    for marker_id, current_pos in detected_mag_centres.items():
+        sim_x, sim_y = current_pos
 
-        if marker_id not in registered_marker_ids:
-            # Newly appeared marker — add to Flask and register locally.
-            # Flask's magnet_add is idempotent (see Flask changes), so a
-            # crash-and-restart scenario won't cause duplication.
+        if marker_id not in tracked_magnets:
+            # v3 lifecycle: dictionary membership means "registered on Flask".
+            # New marker — add it once, then record the position Flask accepted.
             ok = flask_magnet_add(marker_id, sim_x, sim_y)
             if ok:
-                registered_marker_ids.add(marker_id)
-                missing_frame_counts[marker_id] = 0
+                tracked_magnets[marker_id] = MagnetTrackState(
+                    last_sent_pos=(sim_x, sim_y),
+                    missing_frames=0,
+                )
                 print(f"Registered magnet marker_{marker_id}")
-        else:
-            # Already registered — update position and reset missing counter.
-            flask_magnet_update(marker_id, sim_x, sim_y)
-            missing_frame_counts[marker_id] = 0
-
-    # --- Handle absent markers ---
-    # Iterate over a snapshot of registered IDs since we may modify the set
-    for marker_id in list(registered_marker_ids):
-
-        if marker_id in currently_detected_ids:
-            # Detected this frame, already handled above
             continue
 
-        # Marker was registered but not detected this frame
-        missing_frame_counts[marker_id] = missing_frame_counts.get(marker_id, 0) + 1
+        state = tracked_magnets[marker_id]
 
-        if missing_frame_counts[marker_id] > MISSING_FRAME_THRESHOLD:
-            # Absent for too long — treat as genuinely removed
+        # Marker is visible again, so reset its disappearance debounce counter
+        # regardless of whether we send a position update this frame.
+        state.missing_frames = 0
+
+        if _position_changed_enough(current_pos, state.last_sent_pos):
+            # v3 latency optimisation: only send a blocking HTTP update when the
+            # movement is meaningful relative to the last Flask-synchronised pos.
+            ok = flask_magnet_update(marker_id, sim_x, sim_y)
+            if ok:
+                state.last_sent_pos = (sim_x, sim_y)
+                print(
+                    f"Updated marker_{marker_id}: "
+                    f"({sim_x:.3f}, {sim_y:.3f})"
+                )
+        else:
+            # Movement is within the deadband. This avoids redundant POSTs from
+            # ArUco jitter and keeps Flask at the last valid synced position.
+            print(
+                f"marker_{marker_id} movement below epsilon; "
+                f"holding ({state.last_sent_pos[0]:.3f}, {state.last_sent_pos[1]:.3f})"
+            )
+
+    # --- Handle absent markers ---
+    # Iterate over a snapshot because successful removal deletes from tracked_magnets.
+    for marker_id in list(tracked_magnets.keys()):
+        if marker_id in currently_detected_ids:
+            # Detected this frame, already handled above.
+            continue
+
+        state = tracked_magnets[marker_id]
+        state.missing_frames += 1
+
+        if state.missing_frames > MISSING_FRAME_THRESHOLD:
+            # Absent for too long — remove from Flask and drop local state.
             ok = flask_magnet_remove(marker_id)
             if ok:
-                registered_marker_ids.discard(marker_id)
-                missing_frame_counts.pop(marker_id, None)
-                print(f"Removed magnet marker_{marker_id} after {MISSING_FRAME_THRESHOLD} missing frames")
+                tracked_magnets.pop(marker_id, None)
+                print(
+                    f"Removed magnet marker_{marker_id} after "
+                    f"{MISSING_FRAME_THRESHOLD} missing frames"
+                )
         else:
-            # Within threshold — hold last position on Flask, do nothing this frame
-            print(f"marker_{marker_id} missing for {missing_frame_counts[marker_id]} frame(s), holding position")
-
+            # Within threshold — hold the last Flask-sent position. No POST.
+            print(
+                f"marker_{marker_id} missing for {state.missing_frames} frame(s), "
+                "holding position"
+            )
 
 def cleanup_all_registered_magnets() -> None:
     """
     Side-effect function.
-    Removes all currently registered magnets from Flask on exit.
-    Used in the finally block to leave Flask in a clean state.
+    Removes all magnets registered during this session from Flask on exit.
+
+    v3 lifecycle refactor: tracked_magnets is now the single source of truth for
+    which markers are registered with Flask, so cleanup only iterates this dict.
     """
-    for marker_id in list(registered_marker_ids):
+    for marker_id in list(tracked_magnets.keys()):
         flask_magnet_remove(marker_id)
-        registered_marker_ids.discard(marker_id)
-        missing_frame_counts.pop(marker_id, None)
+        tracked_magnets.pop(marker_id, None)
     print("All registered magnets removed from Flask.")
 
 
@@ -301,7 +368,7 @@ def extract_board_and_tokens(
     detected_mag_centres_px = {
         m_id: centres[m_id]
         for m_id in MAGNET_IDS
-        if m_id in centres #Can't i just do centres.get(i) for i in range(4,7)?
+        if m_id in centres
     }
 
     return board_corners_pos, detected_mag_centres_px
