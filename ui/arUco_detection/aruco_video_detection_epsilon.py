@@ -55,7 +55,7 @@ MISSING_FRAME_THRESHOLD = 5
 # marker position has moved by more than this amount in simulation coordinates.
 # The board range is roughly [-1.8, 1.8], so 0.02 is a small deadband. Tune this
 # based on your observed ArUco jitter and acceptable responsiveness.
-POSITION_EPSILON = 0.02
+POSITION_EPSILON = 0.04
 POSITION_EPSILON_SQ = POSITION_EPSILON * POSITION_EPSILON
 
 
