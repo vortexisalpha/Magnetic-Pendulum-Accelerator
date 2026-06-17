@@ -9,9 +9,7 @@ from typing import Optional
 import requests
 
 
-# =============================================================================
 # Configuration
-# =============================================================================
 
 _TEXT_FONT = cv2.FONT_HERSHEY_PLAIN
 
@@ -59,9 +57,7 @@ POSITION_EPSILON = 0.04
 POSITION_EPSILON_SQ = POSITION_EPSILON * POSITION_EPSILON
 
 
-# =============================================================================
 # Dynamic magnet state
-# =============================================================================
 
 @dataclass
 class MagnetTrackState:
@@ -84,9 +80,8 @@ class MagnetTrackState:
 # manually synchronised.
 tracked_magnets: dict[int, MagnetTrackState] = {}
 
-# =============================================================================
 # Performance measurement
-# =============================================================================
+
 # Cumulative per-stage latencies (seconds). Keys are the 7 pipeline stages.
 cumulative_latencies: dict[str, float] = {
     "detect_markers": 0.0,
@@ -108,9 +103,7 @@ cumulative_latencies.setdefault("imshow_frame", 0.0)
 cumulative_latencies.setdefault("imshow_warped", 0.0)
 
 
-# =============================================================================
 # Network I/O
-# =============================================================================
 
 def post_json(endpoint: str, payload: dict) -> bool:
     """
@@ -283,9 +276,7 @@ def cleanup_all_registered_magnets() -> None:
     print("All registered magnets removed from Flask.")
 
 
-# =============================================================================
 # Computer vision: detection and geometry
-# =============================================================================
 
 def detect_aruco_markers(
     frame: np.ndarray,
@@ -418,9 +409,7 @@ def transform_mag_centres(
     return sim_coords
 
 
-# =============================================================================
 # Visualisation helpers
-# =============================================================================
 
 def annotate_marker_centres(
     frame: np.ndarray,
@@ -469,9 +458,7 @@ def make_warped_debug_view(frame: np.ndarray, H_view: np.ndarray) -> np.ndarray:
     return cv2.warpPerspective(frame.copy(), H_view, (WARPED_SIZE, WARPED_SIZE))
 
 
-# =============================================================================
 # Per-frame pipeline
-# =============================================================================
 
 def process_frame(
     frame: np.ndarray,
@@ -558,9 +545,7 @@ def process_frame(
     return warped, stage_times
 
 
-# =============================================================================
 # Main webcam loop
-# =============================================================================
 
 def stream_webcam_with_aruco(
     camera_index: int = 0,
@@ -641,9 +626,7 @@ def stream_webcam_with_aruco(
             print("No frames processed; no latency data available.")
 
 
-# =============================================================================
 # Entry point
-# =============================================================================
 
 if __name__ == "__main__":
     try:

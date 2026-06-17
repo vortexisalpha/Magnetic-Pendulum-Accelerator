@@ -12,6 +12,7 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
 
     private const float SimHalfSize = 1.8f;
     private const int RenderTextureSize = 512;
+    private const string MaterialResourceRoot = "MagnetPreviewMaterials/";
 
     [SerializeField] private float magnetRadius = 0.11f;
     [SerializeField] private float magnetHeight = 0.12f;
@@ -202,14 +203,15 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
 
     private void CreateMaterials()
     {
-        baseMaterial = CreateMaterial(new Color(0.13f, 0.13f, 0.13f));
-        rodMaterial = CreateMaterial(new Color(0.82f, 0.82f, 0.82f));
-        bobMaterial = CreateMaterial(new Color(0.95f, 0.72f, 0.23f));
-        pivotMaterial = CreateMaterial(new Color(0.95f, 0.95f, 0.95f));
+        baseMaterial = LoadMaterial("MagnetPreview_Base", new Color(0.13f, 0.13f, 0.13f));
+        rodMaterial = LoadMaterial("MagnetPreview_Rod", new Color(0.82f, 0.82f, 0.82f));
+        bobMaterial = LoadMaterial("MagnetPreview_Bob", new Color(0.95f, 0.72f, 0.23f));
+        pivotMaterial = LoadMaterial("MagnetPreview_Pivot", new Color(0.95f, 0.95f, 0.95f));
 
         magnetMaterials = new Material[MagnetPalette.Length];
-        for (int i = 0; i < magnetMaterials.Length; i++)
-            magnetMaterials[i] = CreateMaterial(MagnetPalette[i]);
+        magnetMaterials[0] = LoadMaterial("MagnetPreview_Red", MagnetPalette[0]);
+        magnetMaterials[1] = LoadMaterial("MagnetPreview_Green", MagnetPalette[1]);
+        magnetMaterials[2] = LoadMaterial("MagnetPreview_Blue", MagnetPalette[2]);
     }
 
     private void CreateBasePlane()
@@ -307,7 +309,17 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
         previewCamera.transform.LookAt(sceneRoot.transform.TransformPoint(cameraTarget), Vector3.forward);
     }
 
-    private Material CreateMaterial(Color color)
+    private Material LoadMaterial(string resourceName, Color fallbackColor)
+    {
+        Material source = Resources.Load<Material>(MaterialResourceRoot + resourceName);
+        if (source != null)
+            return Instantiate(source);
+
+        Debug.LogWarning($"[MagnetPendulumPreview] Missing material resource '{resourceName}'; using runtime fallback.");
+        return CreateFallbackMaterial(fallbackColor);
+    }
+
+    private Material CreateFallbackMaterial(Color color)
     {
         Shader shader = Shader.Find("Universal Render Pipeline/Lit");
         if (shader == null)
