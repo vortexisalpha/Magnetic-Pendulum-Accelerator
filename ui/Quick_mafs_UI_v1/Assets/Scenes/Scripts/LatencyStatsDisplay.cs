@@ -175,7 +175,7 @@ public sealed class LatencyStatsDisplay : MonoBehaviour
         labelRect.sizeDelta = new Vector2(-28f, -3f);
 
         toggleLabel.fontSize = 14f;
-        toggleLabel.color = new Color(0.196f, 0.196f, 0.196f, 1f);
+        toggleLabel.color = Color.white;
         toggleLabel.alignment = TextAlignmentOptions.Left;
         toggleLabel.text = "Latency Stats";
         toggleLabel.raycastTarget = true;
