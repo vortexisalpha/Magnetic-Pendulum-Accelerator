@@ -5,6 +5,7 @@ using UnityEngine.UI;
 public sealed class UiTooltipSystem : MonoBehaviour
 {
     private const float MaxWidth = 320f;
+    private const float OwnerGap = 10f;
     private static readonly Vector2 Padding = new Vector2(12f, 8f);
     private static readonly Vector2 CursorOffset = new Vector2(18f, -18f);
 
@@ -64,6 +65,27 @@ public sealed class UiTooltipSystem : MonoBehaviour
         Move(screenPosition);
     }
 
+    public void ShowLeftOfOwner(string message, RectTransform owner)
+    {
+        if (string.IsNullOrWhiteSpace(message) || owner == null)
+            return;
+
+        Canvas canvas = owner.GetComponentInParent<Canvas>();
+        if (canvas == null)
+            return;
+
+        EnsurePanel(canvas);
+        label.text = message;
+
+        Vector2 preferred = label.GetPreferredValues(message, MaxWidth, 0f);
+        panel.sizeDelta = new Vector2(
+            Mathf.Min(preferred.x, MaxWidth) + Padding.x * 2f,
+            preferred.y + Padding.y * 2f);
+
+        panel.gameObject.SetActive(true);
+        PositionLeftOfOwner(owner);
+    }
+
     public void Move(Vector2 screenPosition)
     {
         if (panel == null || currentCanvas == null || !panel.gameObject.activeSelf)
@@ -83,6 +105,39 @@ public sealed class UiTooltipSystem : MonoBehaviour
 
         Vector2 halfCanvas = canvasRect.rect.size * 0.5f;
         Vector2 halfPanel = panel.sizeDelta * 0.5f;
+        localPoint.x = Mathf.Clamp(localPoint.x, -halfCanvas.x + halfPanel.x, halfCanvas.x - halfPanel.x);
+        localPoint.y = Mathf.Clamp(localPoint.y, -halfCanvas.y + halfPanel.y, halfCanvas.y - halfPanel.y);
+        panel.anchoredPosition = localPoint;
+    }
+
+    private void PositionLeftOfOwner(RectTransform owner)
+    {
+        if (panel == null || currentCanvas == null || owner == null)
+            return;
+
+        RectTransform canvasRect = currentCanvas.transform as RectTransform;
+        Camera camera = currentCanvas.renderMode == RenderMode.ScreenSpaceOverlay
+            ? null
+            : currentCanvas.worldCamera;
+
+        Vector3[] worldCorners = new Vector3[4];
+        owner.GetWorldCorners(worldCorners);
+
+        Vector2 ownerLeftCenterScreen = RectTransformUtility.WorldToScreenPoint(
+            camera,
+            (worldCorners[0] + worldCorners[1]) * 0.5f);
+
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                canvasRect,
+                ownerLeftCenterScreen,
+                camera,
+                out Vector2 localPoint))
+            return;
+
+        Vector2 halfCanvas = canvasRect.rect.size * 0.5f;
+        Vector2 halfPanel = panel.sizeDelta * 0.5f;
+
+        localPoint.x -= halfPanel.x + OwnerGap;
         localPoint.x = Mathf.Clamp(localPoint.x, -halfCanvas.x + halfPanel.x, halfCanvas.x - halfPanel.x);
         localPoint.y = Mathf.Clamp(localPoint.y, -halfCanvas.y + halfPanel.y, halfCanvas.y - halfPanel.y);
         panel.anchoredPosition = localPoint;

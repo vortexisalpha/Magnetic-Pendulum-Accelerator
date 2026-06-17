@@ -13,6 +13,7 @@ public sealed class UiTooltipTrigger : MonoBehaviour,
     [SerializeField] private string tooltipText;
     [SerializeField] private float showDelaySeconds = 0.8f;
     [SerializeField] private bool showOnHover;
+    [SerializeField] private bool anchorTooltipLeft;
 
     private RectTransform rectTransform;
     private Coroutine showRoutine;
@@ -31,10 +32,11 @@ public sealed class UiTooltipTrigger : MonoBehaviour,
         Hide();
     }
 
-    public void SetTooltip(string text, bool hoverToShow = false)
+    public void SetTooltip(string text, bool hoverToShow = false, bool placeLeftOfOwner = false)
     {
         tooltipText = text;
         showOnHover = hoverToShow;
+        anchorTooltipLeft = placeLeftOfOwner;
     }
 
     public void OnPointerEnter(PointerEventData eventData)
@@ -48,7 +50,8 @@ public sealed class UiTooltipTrigger : MonoBehaviour,
     public void OnPointerMove(PointerEventData eventData)
     {
         lastScreenPosition = eventData.position;
-        UiTooltipSystem.Instance.Move(lastScreenPosition);
+        if (!anchorTooltipLeft)
+            UiTooltipSystem.Instance.Move(lastScreenPosition);
     }
 
     public void OnPointerExit(PointerEventData eventData)
@@ -87,7 +90,10 @@ public sealed class UiTooltipTrigger : MonoBehaviour,
         if (rectTransform == null || !pointerInside)
             return;
 
-        UiTooltipSystem.Instance.Show(tooltipText, rectTransform, lastScreenPosition);
+        if (anchorTooltipLeft)
+            UiTooltipSystem.Instance.ShowLeftOfOwner(tooltipText, rectTransform);
+        else
+            UiTooltipSystem.Instance.Show(tooltipText, rectTransform, lastScreenPosition);
     }
 
     private void Hide()

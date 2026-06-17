@@ -164,10 +164,15 @@ public sealed class UiTooltipInstaller : MonoBehaviour
 
     private static void Configure(GameObject target, string tooltip)
     {
-        Configure(target, tooltip, false);
+        Configure(target, tooltip, false, false);
     }
 
     private static void Configure(GameObject target, string tooltip, bool hoverToShow)
+    {
+        Configure(target, tooltip, hoverToShow, false);
+    }
+
+    private static void Configure(GameObject target, string tooltip, bool hoverToShow, bool placeLeftOfOwner)
     {
         if (target.GetComponent<RectTransform>() == null)
             return;
@@ -176,7 +181,7 @@ public sealed class UiTooltipInstaller : MonoBehaviour
         if (trigger == null)
             trigger = target.AddComponent<UiTooltipTrigger>();
 
-        trigger.SetTooltip(tooltip, hoverToShow);
+        trigger.SetTooltip(tooltip, hoverToShow, placeLeftOfOwner);
     }
 
     private static void EnsureRootHitTarget(GameObject root)
@@ -232,6 +237,6 @@ public sealed class UiTooltipInstaller : MonoBehaviour
         label.alignment = TextAlignmentOptions.Center;
         label.raycastTarget = false;
 
-        Configure(hintObject, HelpHintText, true);
+        Configure(hintObject, HelpHintText, true, true);
     }
 }
