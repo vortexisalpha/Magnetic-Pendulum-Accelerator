@@ -18,6 +18,13 @@ public class PotentialSurfaceRenderer : MonoBehaviour, IDragHandler, IScrollHand
     [SerializeField] private float trajectoryZOffset = 0.02f;
     [Tooltip("Trajectory line colour (drawn on top of the surface for contrast).")]
     [SerializeField] private Color trajectoryColor = Color.white;
+    [Tooltip("Seconds for the trajectory to draw from start to end.")]
+    [SerializeField] private float trajectoryDrawSeconds = 3f;
+    [Tooltip("Restart the animation once it reaches the end.")]
+    [SerializeField] private bool trajectoryLoop = true;
+    [Tooltip("Radius of the moving marker that travels along the trajectory.")]
+    [SerializeField] private float markerRadius = 0.06f;
+    [SerializeField] private Color markerColor = Color.white;
 
     private RenderTexture renderTexture;
     private GameObject sceneRoot;
@@ -31,6 +38,10 @@ public class PotentialSurfaceRenderer : MonoBehaviour, IDragHandler, IScrollHand
     private GameObject trajectoryObject;
     private LineRenderer trajectoryLine;
     private Vector2[] trajectoryPoints;
+    private Vector3[] trajectoryPositions;
+    private GameObject markerObject;
+    private float trajectoryAnimTime;
+    private bool trajectoryAnimating;
 
     private Vector3 cameraTarget;
     private float cameraDistance = 8f;
@@ -77,6 +88,8 @@ public class PotentialSurfaceRenderer : MonoBehaviour, IDragHandler, IScrollHand
             BuildMesh();
             BuildTrajectoryLine();
         }
+
+        AnimateTrajectory();
     }
 
     private static bool MagnetsChanged(Vector2[] a, Vector2[] b)
@@ -135,7 +148,7 @@ public class PotentialSurfaceRenderer : MonoBehaviour, IDragHandler, IScrollHand
         BuildMesh();
     }
     
-    private const float ZScale = 0.12f;
+    private const float ZScale = 0.2f;
     private static readonly Vector2[] TestMagnets =
     {
         new Vector2( 0.0f,  1.0f),
@@ -236,16 +249,59 @@ public class PotentialSurfaceRenderer : MonoBehaviour, IDragHandler, IScrollHand
         trajectoryLine.startColor = trajectoryColor;
         trajectoryLine.endColor = trajectoryColor;
 
-        var positions = new Vector3[trajectoryPoints.Length];
+        trajectoryPositions = new Vector3[trajectoryPoints.Length];
         for (int i = 0; i < trajectoryPoints.Length; i++)
         {
             Vector2 p = trajectoryPoints[i];
             float v = PotentialEvaluator.Evaluate(p.x, p.y, currentMagnets, currentOmega, currentMu, currentH);
-            positions[i] = new Vector3(p.x, p.y, v * ZScale + trajectoryZOffset);
+            trajectoryPositions[i] = new Vector3(p.x, p.y, v * ZScale + trajectoryZOffset);
         }
 
-        trajectoryLine.positionCount = positions.Length;
-        trajectoryLine.SetPositions(positions);
+        BuildMarker();
+        trajectoryAnimTime = 0f;
+        trajectoryAnimating = true;
+        trajectoryLine.positionCount = 0;
+    }
+
+    private void BuildMarker()
+    {
+        if (markerObject != null) return;
+
+        markerObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        markerObject.name = "TrajectoryMarker";
+        Destroy(markerObject.GetComponent<Collider>());
+        markerObject.transform.SetParent(sceneRoot.transform, false);
+        markerObject.transform.localScale = Vector3.one * (markerRadius * 2f);
+
+        var mat = markerObject.GetComponent<MeshRenderer>().material;
+        mat.color = markerColor;
+    }
+
+    private void AnimateTrajectory()
+    {
+        if (!trajectoryAnimating || trajectoryLine == null ||
+            trajectoryPositions == null || trajectoryPositions.Length < 2)
+            return;
+
+        trajectoryAnimTime += Time.deltaTime;
+        float duration = Mathf.Max(0.01f, trajectoryDrawSeconds);
+        float progress = Mathf.Clamp01(trajectoryAnimTime / duration);
+
+        int count = Mathf.Max(2, Mathf.CeilToInt(progress * trajectoryPositions.Length));
+        count = Mathf.Min(count, trajectoryPositions.Length);
+
+        trajectoryLine.positionCount = count;
+        for (int i = 0; i < count; i++)
+            trajectoryLine.SetPosition(i, trajectoryPositions[i]);
+
+        if (markerObject != null)
+            markerObject.transform.localPosition = trajectoryPositions[count - 1];
+
+        if (progress >= 1f)
+        {
+            if (trajectoryLoop) trajectoryAnimTime = 0f;
+            else trajectoryAnimating = false;
+        }
     }
 
     private void FrameCamera(Bounds bounds)

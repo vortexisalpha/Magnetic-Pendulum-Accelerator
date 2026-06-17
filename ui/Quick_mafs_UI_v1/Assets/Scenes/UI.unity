@@ -2085,6 +2085,10 @@ MonoBehaviour:
   trajectoryWidth: 0.03
   trajectoryZOffset: 0.02
   trajectoryColor: {r: 1, g: 1, b: 1, a: 1}
+  trajectoryDrawSeconds: 3
+  trajectoryLoop: 1
+  markerRadius: 0.06
+  markerColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1001 &926003242
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -4247,8 +4251,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4281479730
-  m_fontColor: {r: 0.196, g: 0.196, b: 0.196, a: 1}
+    rgba: 4294967295
+  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -5340,7 +5344,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: -0.000005722046}
+  m_AnchoredPosition: {x: 0, y: 0.000005722046}
   m_SizeDelta: {x: 0, y: 28}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!1660057539 &9223372036854775807
