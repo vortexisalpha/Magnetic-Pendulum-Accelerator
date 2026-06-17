@@ -67,6 +67,27 @@ public class PotentialSurfaceRenderer : MonoBehaviour, IDragHandler, IScrollHand
         }
     }
 
+    void Update()
+    {
+        if (sceneRoot == null) return;
+
+        Vector2[] latest = GetMagnetPositions();
+        if (MagnetsChanged(latest, currentMagnets))
+        {
+            BuildMesh();
+            BuildTrajectoryLine();
+        }
+    }
+
+    private static bool MagnetsChanged(Vector2[] a, Vector2[] b)
+    {
+        if (a == null || b == null || a.Length != b.Length) return true;
+        const float epsSqr = 0.0001f;
+        for (int i = 0; i < a.Length; i++)
+            if ((a[i] - b[i]).sqrMagnitude > epsSqr) return true;
+        return false;
+    }
+
     void OnDestroy()
     {
         if (PynqConnection.Instance != null)

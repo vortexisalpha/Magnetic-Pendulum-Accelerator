@@ -72,6 +72,7 @@ public class PynqConnection : MonoBehaviour
 
     public ImageMessage LatestImage { get; private set; }
     public InfoMessage LatestInfo { get; private set; }
+    public void SetLatestInfo(InfoMessage info) => LatestInfo = info;
     public LatencyStatsMessage LatestLatencyStats { get; private set; } = new LatencyStatsMessage();
     public TrajectoryMessage LatestTrajectory { get; private set; }
     public bool IsConnected => connected;

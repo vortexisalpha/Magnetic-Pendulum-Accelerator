@@ -81,6 +81,8 @@ public class MagnetRenderer : MonoBehaviour
     {
         if (preview != null)
             preview.UpdateMagnets(info.magnets);
+
+        PynqConnection.Instance?.SetLatestInfo(info);
     }
 
     void TrackMagnetMotion(Dictionary<string, MagnetCoords> magnets)
