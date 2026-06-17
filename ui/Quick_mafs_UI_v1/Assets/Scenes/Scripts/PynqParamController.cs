@@ -24,6 +24,7 @@ public class PynqParamController : MonoBehaviour
     private const float PreviewTimeoutSeconds = 0.35f;
 
     public static event Action<bool, int, int, bool> HighResGateChanged;
+    public static event Action<ControlData> ParametersChanged;
     public static bool IsHighResGateActive { get; private set; }
     public static bool IsHighResRenderPending { get; private set; }
     public static int PendingResX { get; private set; }
@@ -241,8 +242,13 @@ public class PynqParamController : MonoBehaviour
 
     public static void NotifySliderChanged()
     {
-        if (instance == null || PynqConnection.Instance == null) return;
+        if (instance == null) return;
         if (!instance.slidersResolved) instance.ResolveSliders();
+        if (PynqConnection.Instance == null)
+        {
+            instance.SnapshotAndPublishSliders();
+            return;
+        }
         instance.SendPreviewWhileDragging();
     }
 
@@ -301,14 +307,20 @@ public class PynqParamController : MonoBehaviour
         if (resYSlider != null && resYSlider.Resolution > 0) data.resY = resYSlider.Resolution;
     }
 
+    private void SnapshotAndPublishSliders()
+    {
+        SnapshotSliders();
+        ParametersChanged?.Invoke(CopyData(data));
+    }
+
     private void SendNow()
     {
-        if (PynqConnection.Instance == null) return;
-
         if (!(slidersDirty || viewportDirty))
             return;
 
-        SnapshotSliders();
+        SnapshotAndPublishSliders();
+
+        if (PynqConnection.Instance == null) return;
 
         bool highRes = RequiresHighResConfirm(data.resX, data.resY);
         if (highRes && !bypassHighResGate)
@@ -340,13 +352,14 @@ public class PynqParamController : MonoBehaviour
 
     void SendPreviewWhileDragging()
     {
+        SnapshotAndPublishSliders();
+
         if (previewInFlight)
         {
             previewPending = true;
             return;
         }
 
-        SnapshotSliders();
         GetPreviewResolution(data.resX, data.resY, out int previewResX, out int previewResY);
 
         var previewData = CopyData(data);

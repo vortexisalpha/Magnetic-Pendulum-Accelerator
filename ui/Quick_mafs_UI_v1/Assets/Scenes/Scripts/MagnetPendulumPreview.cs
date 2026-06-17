@@ -19,6 +19,15 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
     [SerializeField] private float pendulumPivotHeight = 1.8f;
     [SerializeField] private float pendulumBobHeight = 0.34f;
     [SerializeField] private float pendulumBobRadius = 0.16f;
+    [SerializeField] private Vector2 magneticStrengthRange = new Vector2(0.7f, 7f);
+    [SerializeField] private Vector2 pendulumLengthRange = new Vector2(6.6f, 19.6f);
+    [SerializeField] private Vector2 pendulumHeightRange = new Vector2(0.01f, 1f);
+    [SerializeField] private float minMagnetRadius = 0.08f;
+    [SerializeField] private float maxMagnetRadius = 0.24f;
+    [SerializeField] private float minVisualPendulumLength = 0.9f;
+    [SerializeField] private float maxVisualPendulumLength = 2.1f;
+    [SerializeField] private float minVisualPendulumHeight = 0.2f;
+    [SerializeField] private float maxVisualPendulumHeight = 0.95f;
     [SerializeField] private float orbitSensitivity = 0.35f;
     [SerializeField] private float panSensitivity = 0.004f;
     [SerializeField] private float zoomSensitivity = 0.35f;
@@ -38,12 +47,18 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
     private Material bobMaterial;
     private Material pivotMaterial;
     private Material[] magnetMaterials;
+    private Transform pivotTransform;
+    private Transform rodTransform;
+    private Transform bobTransform;
 
     private Vector3 cameraTarget = new Vector3(0f, 0f, 0.45f);
     private float cameraDistance = 4.4f;
     private float yawDegrees = -45f;
     private float pitchDegrees = 32f;
     private int activePointerId = int.MinValue;
+    private float currentMagnetRadius;
+    private float currentPendulumLength;
+    private float currentPendulumHeight;
 
     private static readonly Color[] MagnetPalette =
     {
@@ -55,8 +70,34 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
     public void Initialize(RawImage targetDisplay)
     {
         display = targetDisplay;
+        currentMagnetRadius = magnetRadius;
+        currentPendulumLength = pendulumPivotHeight - pendulumBobHeight;
+        currentPendulumHeight = pendulumBobHeight;
         BuildPreviewScene();
+        ApplyPendulumGeometry();
         ApplyCameraTransform();
+    }
+
+    public void ApplyParameters(ControlData data)
+    {
+        if (data == null)
+            return;
+
+        currentMagnetRadius = Mathf.Lerp(
+            minMagnetRadius,
+            maxMagnetRadius,
+            Mathf.InverseLerp(magneticStrengthRange.x, magneticStrengthRange.y, data.magneticStrength));
+        currentPendulumLength = Mathf.Lerp(
+            minVisualPendulumLength,
+            maxVisualPendulumLength,
+            Mathf.InverseLerp(pendulumLengthRange.x, pendulumLengthRange.y, data.pendulumLength));
+        currentPendulumHeight = Mathf.Lerp(
+            minVisualPendulumHeight,
+            maxVisualPendulumHeight,
+            Mathf.InverseLerp(pendulumHeightRange.x, pendulumHeightRange.y, data.pendulumHeight));
+
+        ApplyMagnetScale();
+        ApplyPendulumGeometry();
     }
 
     public void UpdateMagnets(IDictionary<string, MagnetCoords> magnets)
@@ -226,30 +267,26 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
 
     private void CreatePendulum()
     {
-        Vector3 pivotPosition = new Vector3(0f, 0f, pendulumPivotHeight);
-        Vector3 bobPosition = new Vector3(0f, 0f, pendulumBobHeight);
-
         GameObject pivot = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         pivot.name = "Pendulum Pivot";
         pivot.transform.SetParent(previewRoot, false);
-        pivot.transform.localPosition = pivotPosition;
         pivot.transform.localScale = Vector3.one * 0.12f;
         pivot.GetComponent<Renderer>().material = pivotMaterial;
+        pivotTransform = pivot.transform;
 
         GameObject rod = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         rod.name = "Pendulum Rod";
         rod.transform.SetParent(previewRoot, false);
-        rod.transform.localPosition = (pivotPosition + bobPosition) * 0.5f;
         rod.transform.localRotation = Quaternion.FromToRotation(Vector3.up, Vector3.forward);
-        rod.transform.localScale = new Vector3(0.025f, Vector3.Distance(pivotPosition, bobPosition) * 0.5f, 0.025f);
         rod.GetComponent<Renderer>().material = rodMaterial;
+        rodTransform = rod.transform;
 
         GameObject bob = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         bob.name = "Pendulum Bob";
         bob.transform.SetParent(previewRoot, false);
-        bob.transform.localPosition = bobPosition;
         bob.transform.localScale = Vector3.one * (pendulumBobRadius * 2f);
         bob.GetComponent<Renderer>().material = bobMaterial;
+        bobTransform = bob.transform;
     }
 
     private void CreatePreviewCamera()
@@ -287,10 +324,30 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
         magnet.name = key;
         magnet.transform.SetParent(previewRoot, false);
         magnet.transform.localRotation = Quaternion.FromToRotation(Vector3.up, Vector3.forward);
-        magnet.transform.localScale = new Vector3(magnetRadius, magnetHeight * 0.5f, magnetRadius);
+        magnet.transform.localScale = new Vector3(currentMagnetRadius, magnetHeight * 0.5f, currentMagnetRadius);
         magnet.GetComponent<Renderer>().material = magnetMaterials[magnetIndex % magnetMaterials.Length];
         magnetObjects[key] = magnet;
         return magnet;
+    }
+
+    private void ApplyMagnetScale()
+    {
+        foreach (var magnet in magnetObjects.Values)
+            magnet.transform.localScale = new Vector3(currentMagnetRadius, magnetHeight * 0.5f, currentMagnetRadius);
+    }
+
+    private void ApplyPendulumGeometry()
+    {
+        if (pivotTransform == null || rodTransform == null || bobTransform == null)
+            return;
+
+        Vector3 bobPosition = new Vector3(0f, 0f, currentPendulumHeight);
+        Vector3 pivotPosition = new Vector3(0f, 0f, currentPendulumHeight + currentPendulumLength);
+
+        bobTransform.localPosition = bobPosition;
+        pivotTransform.localPosition = pivotPosition;
+        rodTransform.localPosition = (pivotPosition + bobPosition) * 0.5f;
+        rodTransform.localScale = new Vector3(0.025f, currentPendulumLength * 0.5f, 0.025f);
     }
 
     private void ApplyCameraTransform()

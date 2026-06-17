@@ -32,13 +32,16 @@ public class MagnetRenderer : MonoBehaviour
             if (preview == null)
                 preview = miniDisplay.gameObject.AddComponent<MagnetPendulumPreview>();
             preview.Initialize(miniDisplay);
+            preview.ApplyParameters(PynqParamController.CurrentData);
         }
 
+        PynqParamController.ParametersChanged += OnParametersChanged;
         StartCoroutine(PollLoop());
     }
 
     void OnDestroy()
     {
+        PynqParamController.ParametersChanged -= OnParametersChanged;
         StopAllCoroutines();
     }
 
@@ -83,6 +86,12 @@ public class MagnetRenderer : MonoBehaviour
             preview.UpdateMagnets(info.magnets);
 
         PynqConnection.Instance?.SetLatestInfo(info);
+    }
+
+    void OnParametersChanged(ControlData data)
+    {
+        if (preview != null)
+            preview.ApplyParameters(data);
     }
 
     void TrackMagnetMotion(Dictionary<string, MagnetCoords> magnets)
