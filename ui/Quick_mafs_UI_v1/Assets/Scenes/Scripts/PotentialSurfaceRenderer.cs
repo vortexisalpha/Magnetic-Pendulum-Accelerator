@@ -135,7 +135,7 @@ public class PotentialSurfaceRenderer : MonoBehaviour, IDragHandler, IScrollHand
         BuildMesh();
     }
     
-    private const float ZScale = 0.05f;
+    private const float ZScale = 0.12f;
     private static readonly Vector2[] TestMagnets =
     {
         new Vector2( 0.0f,  1.0f),
