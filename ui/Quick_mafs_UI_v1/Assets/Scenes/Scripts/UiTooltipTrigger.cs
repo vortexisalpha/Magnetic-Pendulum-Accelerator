@@ -2,11 +2,8 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-// Implements only the hover events (enter/exit/move). These are dispatched to the
-// whole hovered hierarchy, so attaching this to child graphics of a control does not
-// consume pointer clicks. Do NOT add IPointerClick/Down/UpHandler here: those are
-// delivered to the first ancestor that handles them and would swallow the click before
-// it reaches the underlying Selectable (e.g. TMP_Dropdown, Button, Slider).
+// Implements only hover/move events and polls for right click while hovered. This
+// avoids consuming clicks before they reach Selectables such as dropdowns and sliders.
 public sealed class UiTooltipTrigger : MonoBehaviour,
     IPointerEnterHandler,
     IPointerExitHandler,
@@ -15,6 +12,7 @@ public sealed class UiTooltipTrigger : MonoBehaviour,
     [TextArea]
     [SerializeField] private string tooltipText;
     [SerializeField] private float showDelaySeconds = 0.8f;
+    [SerializeField] private bool showOnHover;
 
     private RectTransform rectTransform;
     private Coroutine showRoutine;
@@ -33,16 +31,18 @@ public sealed class UiTooltipTrigger : MonoBehaviour,
         Hide();
     }
 
-    public void SetTooltip(string text)
+    public void SetTooltip(string text, bool hoverToShow = false)
     {
         tooltipText = text;
+        showOnHover = hoverToShow;
     }
 
     public void OnPointerEnter(PointerEventData eventData)
     {
         pointerInside = true;
         lastScreenPosition = eventData.position;
-        QueueShow();
+        if (showOnHover)
+            QueueShow();
     }
 
     public void OnPointerMove(PointerEventData eventData)
@@ -55,6 +55,12 @@ public sealed class UiTooltipTrigger : MonoBehaviour,
     {
         pointerInside = false;
         Hide();
+    }
+
+    void Update()
+    {
+        if (!showOnHover && pointerInside && Input.GetMouseButtonDown(1))
+            ShowNow();
     }
 
     private void QueueShow()
@@ -73,8 +79,13 @@ public sealed class UiTooltipTrigger : MonoBehaviour,
         yield return new WaitForSecondsRealtime(showDelaySeconds);
         showRoutine = null;
 
+        ShowNow();
+    }
+
+    private void ShowNow()
+    {
         if (rectTransform == null || !pointerInside)
-            yield break;
+            return;
 
         UiTooltipSystem.Instance.Show(tooltipText, rectTransform, lastScreenPosition);
     }

@@ -6,6 +6,8 @@ using UnityEngine.UI;
 public sealed class UiTooltipInstaller : MonoBehaviour
 {
     private const float RescanSeconds = 0.75f;
+    private const string HelpHintName = "TooltipHelpHint";
+    private const string HelpHintText = "Right-click anything for more info.";
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void CreateInstaller()
@@ -32,6 +34,8 @@ public sealed class UiTooltipInstaller : MonoBehaviour
 
     private static void InstallTooltips()
     {
+        EnsureHelpHint();
+
         foreach (SliderTextDisplay display in FindObjectsByType<SliderTextDisplay>(
                      FindObjectsInactive.Include,
                      FindObjectsSortMode.None))
@@ -160,6 +164,11 @@ public sealed class UiTooltipInstaller : MonoBehaviour
 
     private static void Configure(GameObject target, string tooltip)
     {
+        Configure(target, tooltip, false);
+    }
+
+    private static void Configure(GameObject target, string tooltip, bool hoverToShow)
+    {
         if (target.GetComponent<RectTransform>() == null)
             return;
 
@@ -167,7 +176,7 @@ public sealed class UiTooltipInstaller : MonoBehaviour
         if (trigger == null)
             trigger = target.AddComponent<UiTooltipTrigger>();
 
-        trigger.SetTooltip(tooltip);
+        trigger.SetTooltip(tooltip, hoverToShow);
     }
 
     private static void EnsureRootHitTarget(GameObject root)
@@ -178,5 +187,51 @@ public sealed class UiTooltipInstaller : MonoBehaviour
         Image hitTarget = root.AddComponent<Image>();
         hitTarget.color = Color.clear;
         hitTarget.raycastTarget = true;
+    }
+
+    private static void EnsureHelpHint()
+    {
+        Canvas canvas = GameObject.Find("Canvas")?.GetComponent<Canvas>() ?? FindFirstObjectByType<Canvas>();
+        if (canvas == null)
+            return;
+
+        Transform existing = canvas.transform.Find(HelpHintName);
+        GameObject hintObject = existing != null
+            ? existing.gameObject
+            : new GameObject(HelpHintName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+
+        RectTransform hintRect = hintObject.GetComponent<RectTransform>();
+        hintRect.SetParent(canvas.transform, false);
+        hintRect.anchorMin = hintRect.anchorMax = new Vector2(1f, 0f);
+        hintRect.pivot = new Vector2(1f, 0f);
+        hintRect.anchoredPosition = new Vector2(-12f, 12f);
+        hintRect.sizeDelta = new Vector2(28f, 28f);
+        hintRect.SetAsLastSibling();
+
+        Image background = hintObject.GetComponent<Image>();
+        background.color = new Color(0.06f, 0.06f, 0.06f, 0.92f);
+        background.raycastTarget = true;
+
+        TextMeshProUGUI label = hintObject.GetComponentInChildren<TextMeshProUGUI>(true);
+        if (label == null)
+        {
+            GameObject labelObject = new GameObject("QuestionMark", typeof(RectTransform), typeof(TextMeshProUGUI));
+            RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+            labelRect.SetParent(hintRect, false);
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+            label = labelObject.GetComponent<TextMeshProUGUI>();
+        }
+
+        label.text = "?";
+        label.color = Color.white;
+        label.fontSize = 20f;
+        label.fontStyle = FontStyles.Bold;
+        label.alignment = TextAlignmentOptions.Center;
+        label.raycastTarget = false;
+
+        Configure(hintObject, HelpHintText, true);
     }
 }
