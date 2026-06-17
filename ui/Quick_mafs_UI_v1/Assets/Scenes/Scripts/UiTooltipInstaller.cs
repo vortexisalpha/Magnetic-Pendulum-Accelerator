@@ -121,6 +121,8 @@ public sealed class UiTooltipInstaller : MonoBehaviour
                 return "Close the trajectory overlay.";
             if (objectName == "MagnetPreviewFullscreenToggle")
                 return "Swap the magnet visualisation with the main square map view.";
+            if (objectName == "MagnetManualOverrideToggle")
+                return "Toggle manual magnet override. When enabled, drag magnets in the visualisation to stream their positions to the board.";
         }
 
         return null;

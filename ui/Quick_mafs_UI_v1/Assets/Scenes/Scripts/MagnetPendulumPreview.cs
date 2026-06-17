@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -13,6 +14,7 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
     private const float SimHalfSize = 1.8f;
     private const int RenderTextureSize = 512;
     private const string MaterialResourceRoot = "MagnetPreviewMaterials/";
+    private const string MagnetKeyPrefix = "magnet_";
 
     [SerializeField] private float magnetRadius = 0.11f;
     [SerializeField] private float magnetHeight = 0.12f;
@@ -35,6 +37,7 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
     [SerializeField] private float maxCameraDistance = 8.0f;
 
     private readonly Dictionary<string, GameObject> magnetObjects = new Dictionary<string, GameObject>();
+    private readonly Dictionary<string, MagnetCoords> currentMagnets = new Dictionary<string, MagnetCoords>();
     private readonly HashSet<string> seenMagnetKeys = new HashSet<string>();
 
     private RawImage display;
@@ -56,9 +59,13 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
     private float yawDegrees = -45f;
     private float pitchDegrees = 32f;
     private int activePointerId = int.MinValue;
+    private string draggedMagnetKey;
+    private bool manualOverrideEnabled;
     private float currentMagnetRadius;
     private float currentPendulumLength;
     private float currentPendulumHeight;
+
+    public event Action<Dictionary<string, MagnetCoords>> ManualMagnetsChanged;
 
     private static readonly Color[] MagnetPalette =
     {
@@ -102,9 +109,46 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
 
     public void UpdateMagnets(IDictionary<string, MagnetCoords> magnets)
     {
-        if (magnets == null || previewRoot == null)
+        if (manualOverrideEnabled || magnets == null || previewRoot == null)
             return;
 
+        StoreMagnetSnapshot(magnets);
+        ApplyMagnetSnapshot(currentMagnets);
+    }
+
+    public void SetManualOverrideEnabled(bool enabled)
+    {
+        manualOverrideEnabled = enabled;
+        draggedMagnetKey = null;
+
+        if (!manualOverrideEnabled)
+            return;
+
+        if (currentMagnets.Count == 0)
+            SeedDefaultManualMagnets();
+
+        ApplyMagnetSnapshot(currentMagnets);
+        ManualMagnetsChanged?.Invoke(CloneMagnetSnapshot());
+    }
+
+    private void StoreMagnetSnapshot(IDictionary<string, MagnetCoords> magnets)
+    {
+        currentMagnets.Clear();
+        foreach (var magnet in magnets)
+        {
+            if (!TryParseMagnetIndex(magnet.Key, out _))
+                continue;
+
+            currentMagnets[magnet.Key] = new MagnetCoords
+            {
+                x = Mathf.Clamp(magnet.Value.x, -SimHalfSize, SimHalfSize),
+                y = Mathf.Clamp(magnet.Value.y, -SimHalfSize, SimHalfSize),
+            };
+        }
+    }
+
+    private void ApplyMagnetSnapshot(IDictionary<string, MagnetCoords> magnets)
+    {
         seenMagnetKeys.Clear();
 
         foreach (var magnet in magnets)
@@ -142,8 +186,13 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
             return;
 
         activePointerId = eventData.pointerId;
+        draggedMagnetKey = null;
         IsPointerOverPreview = true;
         IsPointerControllingPreview = true;
+
+        if (manualOverrideEnabled && eventData.button == PointerEventData.InputButton.Left)
+            draggedMagnetKey = PickMagnet(eventData.position, eventData.pressEventCamera);
+
         eventData.Use();
     }
 
@@ -152,7 +201,16 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
         if (eventData.pointerId != activePointerId)
             return;
 
-        if (eventData.button == PointerEventData.InputButton.Left)
+        if (manualOverrideEnabled && !string.IsNullOrEmpty(draggedMagnetKey))
+        {
+            if (TryGetMagnetPlanePosition(eventData.position, eventData.pressEventCamera, out Vector2 simPosition))
+            {
+                currentMagnets[draggedMagnetKey] = new MagnetCoords { x = simPosition.x, y = simPosition.y };
+                ApplyMagnetSnapshot(currentMagnets);
+                ManualMagnetsChanged?.Invoke(CloneMagnetSnapshot());
+            }
+        }
+        else if (eventData.button == PointerEventData.InputButton.Left)
         {
             yawDegrees += eventData.delta.x * orbitSensitivity;
             pitchDegrees -= eventData.delta.y * orbitSensitivity;
@@ -175,6 +233,7 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
             return;
 
         activePointerId = int.MinValue;
+        draggedMagnetKey = null;
         IsPointerControllingPreview = false;
         IsPointerOverPreview = RectTransformUtility.RectangleContainsScreenPoint(
             display.rectTransform,
@@ -330,6 +389,78 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
         return magnet;
     }
 
+    private string PickMagnet(Vector2 screenPosition, Camera eventCamera)
+    {
+        if (!TryGetMagnetPlanePosition(screenPosition, eventCamera, out Vector2 simPosition))
+            return null;
+
+        string closestKey = null;
+        float closestDistanceSqr = Mathf.Pow(Mathf.Max(currentMagnetRadius * 1.4f, 0.22f), 2f);
+
+        foreach (var magnet in currentMagnets)
+        {
+            Vector2 delta = new Vector2(magnet.Value.x, magnet.Value.y) - simPosition;
+            float distanceSqr = delta.sqrMagnitude;
+            if (distanceSqr >= closestDistanceSqr)
+                continue;
+
+            closestDistanceSqr = distanceSqr;
+            closestKey = magnet.Key;
+        }
+
+        return closestKey;
+    }
+
+    private bool TryGetMagnetPlanePosition(Vector2 screenPosition, Camera eventCamera, out Vector2 simPosition)
+    {
+        simPosition = Vector2.zero;
+        if (display == null || previewCamera == null || previewRoot == null)
+            return false;
+
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                display.rectTransform,
+                screenPosition,
+                eventCamera,
+                out Vector2 localPoint))
+            return false;
+
+        Rect rect = display.rectTransform.rect;
+        float u = Mathf.InverseLerp(rect.xMin, rect.xMax, localPoint.x);
+        float v = Mathf.InverseLerp(rect.yMin, rect.yMax, localPoint.y);
+        if (u < 0f || u > 1f || v < 0f || v > 1f)
+            return false;
+
+        Ray ray = previewCamera.ScreenPointToRay(new Vector3(u * RenderTextureSize, v * RenderTextureSize, 0f));
+        Plane plane = new Plane(
+            previewRoot.TransformDirection(Vector3.forward),
+            previewRoot.TransformPoint(new Vector3(0f, 0f, magnetHeight * 0.5f)));
+
+        if (!plane.Raycast(ray, out float distance))
+            return false;
+
+        Vector3 localHit = previewRoot.InverseTransformPoint(ray.GetPoint(distance));
+        simPosition = new Vector2(
+            Mathf.Clamp(-localHit.x, -SimHalfSize, SimHalfSize),
+            Mathf.Clamp(localHit.y, -SimHalfSize, SimHalfSize));
+        return true;
+    }
+
+    private void SeedDefaultManualMagnets()
+    {
+        currentMagnets.Clear();
+        currentMagnets["magnet_0"] = new MagnetCoords { x = -0.75f, y = -0.45f };
+        currentMagnets["magnet_1"] = new MagnetCoords { x = 0.75f, y = -0.45f };
+        currentMagnets["magnet_2"] = new MagnetCoords { x = 0f, y = 0.75f };
+    }
+
+    private Dictionary<string, MagnetCoords> CloneMagnetSnapshot()
+    {
+        var clone = new Dictionary<string, MagnetCoords>();
+        foreach (var magnet in currentMagnets)
+            clone[magnet.Key] = new MagnetCoords { x = magnet.Value.x, y = magnet.Value.y };
+        return clone;
+    }
+
     private void ApplyMagnetScale()
     {
         foreach (var magnet in magnetObjects.Values)
@@ -390,9 +521,9 @@ public sealed class MagnetPendulumPreview : MonoBehaviour, IPointerEnterHandler,
     private static bool TryParseMagnetIndex(string key, out int index)
     {
         index = -1;
-        if (string.IsNullOrEmpty(key) || !key.StartsWith("magnet_"))
+        if (string.IsNullOrEmpty(key) || !key.StartsWith(MagnetKeyPrefix))
             return false;
-        return int.TryParse(key.Substring("magnet_".Length), out index) && index >= 0;
+        return int.TryParse(key.Substring(MagnetKeyPrefix.Length), out index) && index >= 0;
     }
 
     private static void ReleasePointerState()

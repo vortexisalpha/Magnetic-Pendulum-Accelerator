@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Networking;
 using Newtonsoft.Json;
+using TMPro;
 
 // Magnet positions come from the Flask server (fed live by the ArUco camera
 // detection), NOT over the PYNQ TCP link. Image + sliders use TCP; only the
@@ -19,11 +20,15 @@ public class MagnetRenderer : MonoBehaviour
 
     private MagnetPendulumPreview preview;
     private MagnetPreviewFullscreenToggle fullscreenToggle;
+    private Button overrideButton;
+    private TextMeshProUGUI overrideButtonLabel;
     private readonly Dictionary<string, Vector2> lastSentMagnetPositions = new Dictionary<string, Vector2>();
     private readonly Dictionary<string, Vector2> lastObservedMagnetPositions = new Dictionary<string, Vector2>();
+    private readonly Dictionary<string, MagnetCoords> manualMagnets = new Dictionary<string, MagnetCoords>();
     private float lastPynqMagnetSendTime = -1f;
     private bool hasObservedMagnetPositions;
     private Coroutine magnetSettledRoutine;
+    private bool manualOverrideEnabled;
 
     void Start()
     {
@@ -34,11 +39,14 @@ public class MagnetRenderer : MonoBehaviour
                 preview = miniDisplay.gameObject.AddComponent<MagnetPendulumPreview>();
             preview.Initialize(miniDisplay);
             preview.ApplyParameters(PynqParamController.CurrentData);
+            preview.ManualMagnetsChanged += OnManualMagnetsChanged;
 
             fullscreenToggle = miniDisplay.GetComponent<MagnetPreviewFullscreenToggle>();
             if (fullscreenToggle == null)
                 fullscreenToggle = miniDisplay.gameObject.AddComponent<MagnetPreviewFullscreenToggle>();
             fullscreenToggle.Initialize(miniDisplay);
+
+            EnsureOverrideButton();
         }
 
         PynqParamController.ParametersChanged += OnParametersChanged;
@@ -47,6 +55,8 @@ public class MagnetRenderer : MonoBehaviour
 
     void OnDestroy()
     {
+        if (preview != null)
+            preview.ManualMagnetsChanged -= OnManualMagnetsChanged;
         PynqParamController.ParametersChanged -= OnParametersChanged;
         StopAllCoroutines();
     }
@@ -63,6 +73,9 @@ public class MagnetRenderer : MonoBehaviour
 
     IEnumerator FetchAndSendInfo()
     {
+        if (manualOverrideEnabled)
+            yield break;
+
         float requestStartTime = Time.realtimeSinceStartup;
         using (var req = UnityWebRequest.Get(flaskURL + "info"))
         {
@@ -98,6 +111,36 @@ public class MagnetRenderer : MonoBehaviour
     {
         if (preview != null)
             preview.ApplyParameters(data);
+    }
+
+    void ToggleManualOverride()
+    {
+        manualOverrideEnabled = !manualOverrideEnabled;
+        if (preview != null)
+            preview.SetManualOverrideEnabled(manualOverrideEnabled);
+
+        ApplyOverrideButtonState();
+
+        if (!manualOverrideEnabled)
+        {
+            manualMagnets.Clear();
+            hasObservedMagnetPositions = false;
+        }
+    }
+
+    void OnManualMagnetsChanged(Dictionary<string, MagnetCoords> magnets)
+    {
+        if (!manualOverrideEnabled || magnets == null)
+            return;
+
+        CopyMagnets(magnets, manualMagnets);
+        PynqConnection.Instance?.SetLatestInfo(new InfoMessage { magnets = CloneMagnets(manualMagnets) });
+        PynqParamController.NotifyMagnetPositionsChanged();
+
+        if (PynqConnection.Instance != null && ShouldSendMagnetsToPynq(manualMagnets))
+            PynqConnection.Instance.SendMagnets(manualMagnets);
+
+        RestartMagnetSettledTimer();
     }
 
     void TrackMagnetMotion(Dictionary<string, MagnetCoords> magnets)
@@ -178,5 +221,79 @@ public class MagnetRenderer : MonoBehaviour
         snapshot.Clear();
         foreach (var magnet in magnets)
             snapshot[magnet.Key] = new Vector2(magnet.Value.x, magnet.Value.y);
+    }
+
+    static void CopyMagnets(Dictionary<string, MagnetCoords> source, Dictionary<string, MagnetCoords> destination)
+    {
+        destination.Clear();
+        foreach (var magnet in source)
+            destination[magnet.Key] = new MagnetCoords { x = magnet.Value.x, y = magnet.Value.y };
+    }
+
+    static Dictionary<string, MagnetCoords> CloneMagnets(Dictionary<string, MagnetCoords> source)
+    {
+        var clone = new Dictionary<string, MagnetCoords>();
+        CopyMagnets(source, clone);
+        return clone;
+    }
+
+    void EnsureOverrideButton()
+    {
+        if (miniDisplay == null)
+            return;
+
+        const string buttonName = "MagnetManualOverrideToggle";
+        Transform existing = miniDisplay.rectTransform.Find(buttonName);
+        GameObject buttonObject = existing != null
+            ? existing.gameObject
+            : new GameObject(buttonName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+
+        buttonObject.transform.SetParent(miniDisplay.rectTransform, false);
+        RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
+        buttonRect.anchorMin = buttonRect.anchorMax = new Vector2(0f, 1f);
+        buttonRect.pivot = new Vector2(0f, 1f);
+        buttonRect.anchoredPosition = new Vector2(8f, -8f);
+        buttonRect.sizeDelta = new Vector2(62f, 22f);
+
+        overrideButton = buttonObject.GetComponent<Button>();
+        overrideButton.onClick.RemoveListener(ToggleManualOverride);
+        overrideButton.onClick.AddListener(ToggleManualOverride);
+
+        overrideButtonLabel = buttonObject.GetComponentInChildren<TextMeshProUGUI>(true);
+        if (overrideButtonLabel == null)
+        {
+            GameObject labelObject = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+            labelObject.transform.SetParent(buttonObject.transform, false);
+            RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+            overrideButtonLabel = labelObject.GetComponent<TextMeshProUGUI>();
+        }
+
+        overrideButtonLabel.fontSize = 9f;
+        overrideButtonLabel.alignment = TextAlignmentOptions.Center;
+        overrideButtonLabel.raycastTarget = false;
+        buttonObject.transform.SetAsLastSibling();
+        ApplyOverrideButtonState();
+    }
+
+    void ApplyOverrideButtonState()
+    {
+        if (overrideButtonLabel != null)
+        {
+            overrideButtonLabel.text = manualOverrideEnabled ? "Manual" : "Override";
+            overrideButtonLabel.color = Color.white;
+        }
+
+        if (overrideButton != null)
+        {
+            Image image = overrideButton.GetComponent<Image>();
+            if (image != null)
+                image.color = manualOverrideEnabled
+                    ? new Color(0.12f, 0.36f, 0.9f, 0.95f)
+                    : new Color(0.06f, 0.06f, 0.06f, 0.9f);
+        }
     }
 }
