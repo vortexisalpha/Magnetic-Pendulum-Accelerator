@@ -8,8 +8,9 @@ public sealed class MagnetPreviewFullscreenToggle : MonoBehaviour
     private const string MainMapRegionName = "2DMapRegion";
 
     [SerializeField] private RawImage previewDisplay;
-    [SerializeField] private Vector2 buttonSize = new Vector2(54f, 26f);
+    [SerializeField] private Vector2 buttonSize = new Vector2(48f, 22f);
     [SerializeField] private Vector2 buttonInset = new Vector2(8f, 8f);
+    [SerializeField] private float buttonFontSize = 9f;
 
     private RectTransform previewRect;
     private RectTransform mainMapRect;
@@ -158,7 +159,7 @@ public sealed class MagnetPreviewFullscreenToggle : MonoBehaviour
             }
 
             toggleLabel.color = Color.white;
-            toggleLabel.fontSize = 12f;
+            toggleLabel.fontSize = buttonFontSize;
             toggleLabel.alignment = TextAlignmentOptions.Center;
             toggleLabel.raycastTarget = false;
         }

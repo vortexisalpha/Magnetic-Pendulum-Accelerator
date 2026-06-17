@@ -6,8 +6,10 @@ using UnityEngine.UI;
 public sealed class UiTooltipInstaller : MonoBehaviour
 {
     private const float RescanSeconds = 0.75f;
+    private const string HelpOverlayCanvasName = "TooltipHelpOverlayCanvas";
     private const string HelpHintName = "TooltipHelpHint";
     private const string HelpHintText = "Right-click anything for more info.";
+    private const int HelpOverlaySortingOrder = 32000;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void CreateInstaller()
@@ -201,9 +203,8 @@ public sealed class UiTooltipInstaller : MonoBehaviour
 
     private static void EnsureHelpHint()
     {
-        Canvas canvas = GameObject.Find("Canvas")?.GetComponent<Canvas>() ?? FindFirstObjectByType<Canvas>();
-        if (canvas == null)
-            return;
+        Canvas canvas = EnsureHelpOverlayCanvas();
+        RemoveDuplicateHelpHints(canvas.transform);
 
         Transform existing = canvas.transform.Find(HelpHintName);
         GameObject hintObject = existing != null
@@ -243,5 +244,35 @@ public sealed class UiTooltipInstaller : MonoBehaviour
         label.raycastTarget = false;
 
         Configure(hintObject, HelpHintText, true, true);
+    }
+
+    private static Canvas EnsureHelpOverlayCanvas()
+    {
+        GameObject canvasObject = GameObject.Find(HelpOverlayCanvasName);
+        if (canvasObject == null)
+            canvasObject = new GameObject(HelpOverlayCanvasName, typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+
+        Canvas canvas = canvasObject.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.overrideSorting = true;
+        canvas.sortingOrder = HelpOverlaySortingOrder;
+
+        CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(800f, 600f);
+
+        canvasObject.transform.SetAsLastSibling();
+        return canvas;
+    }
+
+    private static void RemoveDuplicateHelpHints(Transform keepParent)
+    {
+        foreach (RectTransform rect in FindObjectsByType<RectTransform>(
+                     FindObjectsInactive.Include,
+                     FindObjectsSortMode.None))
+        {
+            if (rect.name == HelpHintName && rect.parent != keepParent)
+                Destroy(rect.gameObject);
+        }
     }
 }
