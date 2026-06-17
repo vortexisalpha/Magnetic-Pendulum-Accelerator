@@ -18,6 +18,7 @@ public class MagnetRenderer : MonoBehaviour
     [SerializeField] private string flaskURL = "http://35.179.111.223:5000/";
 
     private MagnetPendulumPreview preview;
+    private MagnetPreviewFullscreenToggle fullscreenToggle;
     private readonly Dictionary<string, Vector2> lastSentMagnetPositions = new Dictionary<string, Vector2>();
     private readonly Dictionary<string, Vector2> lastObservedMagnetPositions = new Dictionary<string, Vector2>();
     private float lastPynqMagnetSendTime = -1f;
@@ -33,6 +34,11 @@ public class MagnetRenderer : MonoBehaviour
                 preview = miniDisplay.gameObject.AddComponent<MagnetPendulumPreview>();
             preview.Initialize(miniDisplay);
             preview.ApplyParameters(PynqParamController.CurrentData);
+
+            fullscreenToggle = miniDisplay.GetComponent<MagnetPreviewFullscreenToggle>();
+            if (fullscreenToggle == null)
+                fullscreenToggle = miniDisplay.gameObject.AddComponent<MagnetPreviewFullscreenToggle>();
+            fullscreenToggle.Initialize(miniDisplay);
         }
 
         PynqParamController.ParametersChanged += OnParametersChanged;

@@ -117,6 +117,8 @@ public sealed class UiTooltipInstaller : MonoBehaviour
                 return "Send the pending high-resolution render request to the PYNQ board.";
             if (objectName == "TrajectoryCloseButton")
                 return "Close the trajectory overlay.";
+            if (objectName == "MagnetPreviewFullscreenToggle")
+                return "Swap the magnet visualisation with the main square map view.";
         }
 
         return null;
@@ -153,11 +155,14 @@ public sealed class UiTooltipInstaller : MonoBehaviour
         Configure(root, tooltip);
 
         foreach (Selectable selectable in root.GetComponentsInChildren<Selectable>(true))
-            Configure(selectable.gameObject, tooltip);
+        {
+            string selectableTooltip = GetSelectableTooltip(selectable);
+            Configure(selectable.gameObject, string.IsNullOrEmpty(selectableTooltip) ? tooltip : selectableTooltip);
+        }
 
         foreach (Graphic graphic in root.GetComponentsInChildren<Graphic>(true))
         {
-            if (graphic.raycastTarget)
+            if (graphic.raycastTarget && graphic.GetComponent<Selectable>() == null)
                 Configure(graphic.gameObject, tooltip);
         }
     }
