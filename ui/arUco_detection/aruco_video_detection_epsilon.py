@@ -1,4 +1,5 @@
 import sys
+import threading
 from dataclasses import dataclass
 
 import cv2
@@ -36,7 +37,8 @@ DST_IMSHOW = np.array([
 ], dtype=np.float32)
 
 FLASK_BASE_URL = "http://35.179.111.223:5000"
-REQUEST_TIMEOUT = 2.0
+REQUEST_TIMEOUT = (0.15, 0.25)
+SLOW_POST_SECONDS = 0.2
 
 # Marker IDs reserved for board corners — never treated as magnets
 BOARD_CORNER_IDS = {0, 1, 2, 3}
@@ -73,92 +75,32 @@ class MagnetTrackState:
     missing_frames: int = 0
 
 
-# v3 lifecycle refactor: one dictionary now owns all per-magnet sync state.
-# A marker ID existing in tracked_magnets means it is registered on Flask.
-# This replaces the older parallel registered_marker_ids set and
-# missing_frame_counts dict, avoiding the risk of keeping multiple containers
-# manually synchronised.
-tracked_magnets: dict[int, MagnetTrackState] = {}
-
 # Performance measurement
 
-# Cumulative per-stage latencies (seconds). Keys are the 7 pipeline stages.
+# Cumulative per-stage latencies (seconds).
 cumulative_latencies: dict[str, float] = {
+    "cap_read": 0.0,
     "detect_markers": 0.0,
     "find_centres": 0.0,
     "extract_board_and_tokens": 0.0,
     "compute_homography": 0.0,
     "transform_tokens": 0.0,
-    "sync_flask": 0.0,
+    "network_submit": 0.0,
     "annotate_and_warp": 0.0,
+    "process_frame_call": 0.0,
+    "annotate_fps_call": 0.0,
+    "imshow_frame": 0.0,
+    "imshow_warped": 0.0,
+    "wait_key": 0.0,
 }
+max_latencies: dict[str, float] = dict.fromkeys(cumulative_latencies, 0.0)
 
 # Number of frames processed (used to compute averages on exit)
 frame_count: int = 0
 
-# Additional runtime timers (measuring calls in main loop)
-cumulative_latencies.setdefault("process_frame_call", 0.0)
-cumulative_latencies.setdefault("annotate_fps_call", 0.0)
-cumulative_latencies.setdefault("imshow_frame", 0.0)
-cumulative_latencies.setdefault("imshow_warped", 0.0)
-
-
-# Network I/O
-
-def post_json(endpoint: str, payload: dict) -> bool:
-    """
-    Side-effect function.
-    Sends a JSON POST request to the Flask server.
-    Returns True on HTTP 200, False on any failure.
-    """
-    try:
-        response = requests.post(
-            f"{FLASK_BASE_URL}/{endpoint}",
-            json=payload,
-            timeout=REQUEST_TIMEOUT,
-        )
-        if response.status_code != 200:
-            print(f"POST /{endpoint} failed: {response.status_code} {response.text}")
-            return False
-        return True
-    except requests.exceptions.RequestException as e:
-        print(f"POST /{endpoint} exception: {e}")
-        return False
-
-
-def flask_magnet_add(marker_id: int, x: float, y: float) -> bool:
-    """
-    Side-effect function.
-    Registers a new magnet with Flask.
-    The uid is derived directly from the ArUco marker ID for stable identity.
-    """
-    return post_json("magnet_add", {
-        "uid": f"marker_{marker_id}",
-        "x": x,
-        "y": y,
-    })
-
-
-def flask_magnet_remove(marker_id: int) -> bool:
-    """
-    Side-effect function.
-    Removes a magnet from Flask by its stable uid.
-    """
-    return post_json("magnet_remove", {
-        "uid": f"marker_{marker_id}",
-    })
-
-
-def flask_magnet_update(marker_id: int, x: float, y: float) -> bool:
-    """
-    Side-effect function.
-    Updates the position of an already-registered magnet on Flask.
-    """
-    return post_json("magnet_update_position", {
-        "uid": f"marker_{marker_id}",
-        "x": x,
-        "y": y,
-    })
+def record_latency(name: str, value: float) -> None:
+    cumulative_latencies[name] = cumulative_latencies.get(name, 0.0) + float(value)
+    max_latencies[name] = max(max_latencies.get(name, 0.0), float(value))
 
 
 def _position_changed_enough(
@@ -178,102 +120,190 @@ def _position_changed_enough(
     return (dx * dx + dy * dy) > POSITION_EPSILON_SQ
 
 
+class FlaskMagnetSyncWorker:
+    """
+    Owns Flask magnet state and performs network I/O off the camera thread.
+
+    The main loop only submits the newest detected magnet snapshot. If Flask is
+    slow, pending snapshots are replaced instead of queued so the worker catches
+    up to the latest physical marker state.
+    """
+
+    def __init__(self, base_url: str, timeout: tuple[float, float]) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+        self.session = requests.Session()
+        self.tracked_magnets: dict[int, MagnetTrackState] = {}
+        self._lock = threading.Lock()
+        self._event = threading.Event()
+        self._stop = threading.Event()
+        self._latest_snapshot: Optional[dict[int, tuple[float, float]]] = None
+        self._thread = threading.Thread(
+            target=self._run,
+            name="FlaskMagnetSync",
+            daemon=True,
+        )
+        self._started = False
+        self._closed = False
+        self.submitted_snapshots = 0
+        self.processed_snapshots = 0
+        self.replaced_pending_snapshots = 0
+        self.post_count = 0
+        self.post_failures = 0
+        self.post_total_seconds = 0.0
+        self.post_max_seconds = 0.0
+
+    def start(self) -> None:
+        if self._started:
+            return
+        self._started = True
+        self._thread.start()
+
+    def submit(self, detected_mag_centres: dict[int, tuple[float, float]]) -> None:
+        snapshot = {
+            marker_id: (float(pos[0]), float(pos[1]))
+            for marker_id, pos in detected_mag_centres.items()
+        }
+        with self._lock:
+            if self._latest_snapshot is not None:
+                self.replaced_pending_snapshots += 1
+            self._latest_snapshot = snapshot
+            self.submitted_snapshots += 1
+            self._event.set()
+
+    def stop_and_cleanup(self) -> None:
+        if self._started:
+            self._stop.set()
+            self._event.set()
+            self._thread.join(timeout=2.0)
+            if self._thread.is_alive():
+                print("Flask sync worker did not stop within 2.0 seconds.")
+
+        for marker_id in list(self.tracked_magnets.keys()):
+            if self._post_json("magnet_remove", {"uid": f"marker_{marker_id}"}):
+                self.tracked_magnets.pop(marker_id, None)
+
+        if not self._closed:
+            self.session.close()
+            self._closed = True
+        print("All registered magnets removed from Flask.")
+
+    def print_stats(self) -> None:
+        avg_post = self.post_total_seconds / self.post_count if self.post_count else 0.0
+        print("Flask sync worker stats:")
+        print(f"  submitted snapshots: {self.submitted_snapshots}")
+        print(f"  processed snapshots: {self.processed_snapshots}")
+        print(f"  replaced pending snapshots: {self.replaced_pending_snapshots}")
+        print(f"  POST count: {self.post_count}")
+        print(f"  POST failures: {self.post_failures}")
+        print(f"  POST avg/max seconds: {avg_post:.6f} / {self.post_max_seconds:.6f}")
+
+    def _run(self) -> None:
+        while True:
+            self._event.wait(timeout=0.1)
+
+            with self._lock:
+                snapshot = self._latest_snapshot
+                self._latest_snapshot = None
+                self._event.clear()
+
+            if snapshot is not None:
+                self.processed_snapshots += 1
+                self._sync_snapshot(snapshot)
+
+            if self._stop.is_set():
+                with self._lock:
+                    if self._latest_snapshot is None:
+                        break
+
+    def _sync_snapshot(self, detected_mag_centres: dict[int, tuple[float, float]]) -> None:
+        currently_detected_ids = set(detected_mag_centres.keys())
+
+        for marker_id, current_pos in detected_mag_centres.items():
+            sim_x, sim_y = current_pos
+
+            if marker_id not in self.tracked_magnets:
+                ok = self._post_json("magnet_add", {
+                    "uid": f"marker_{marker_id}",
+                    "x": sim_x,
+                    "y": sim_y,
+                })
+                if ok:
+                    self.tracked_magnets[marker_id] = MagnetTrackState(
+                        last_sent_pos=(sim_x, sim_y),
+                        missing_frames=0,
+                    )
+                    print(f"Registered magnet marker_{marker_id}")
+                continue
+
+            state = self.tracked_magnets[marker_id]
+            state.missing_frames = 0
+
+            if _position_changed_enough(current_pos, state.last_sent_pos):
+                ok = self._post_json("magnet_update_position", {
+                    "uid": f"marker_{marker_id}",
+                    "x": sim_x,
+                    "y": sim_y,
+                })
+                if ok:
+                    state.last_sent_pos = (sim_x, sim_y)
+                    print(f"Updated marker_{marker_id}: ({sim_x:.3f}, {sim_y:.3f})")
+
+        for marker_id in list(self.tracked_magnets.keys()):
+            if marker_id in currently_detected_ids:
+                continue
+
+            state = self.tracked_magnets[marker_id]
+            state.missing_frames += 1
+
+            if state.missing_frames > MISSING_FRAME_THRESHOLD:
+                ok = self._post_json("magnet_remove", {
+                    "uid": f"marker_{marker_id}",
+                })
+                if ok:
+                    self.tracked_magnets.pop(marker_id, None)
+                    print(
+                        f"Removed magnet marker_{marker_id} after "
+                        f"{MISSING_FRAME_THRESHOLD} missing frames"
+                    )
+
+    def _post_json(self, endpoint: str, payload: dict) -> bool:
+        t0 = perf_counter()
+        ok = False
+        try:
+            response = self.session.post(
+                f"{self.base_url}/{endpoint}",
+                json=payload,
+                timeout=self.timeout,
+            )
+            ok = response.status_code == 200
+            if not ok:
+                print(f"POST /{endpoint} failed: {response.status_code} {response.text}")
+            return ok
+        except requests.exceptions.RequestException as e:
+            print(f"POST /{endpoint} exception: {e}")
+            return False
+        finally:
+            elapsed = perf_counter() - t0
+            self.post_count += 1
+            self.post_total_seconds += elapsed
+            self.post_max_seconds = max(self.post_max_seconds, elapsed)
+            if not ok:
+                self.post_failures += 1
+            if elapsed >= SLOW_POST_SECONDS:
+                print(f"Slow POST /{endpoint}: {elapsed:.3f} seconds")
+
+
+flask_sync_worker = FlaskMagnetSyncWorker(FLASK_BASE_URL, REQUEST_TIMEOUT)
+
+
 def sync_magnets_to_flask(detected_mag_centres: dict[int, tuple[float, float]]) -> None:
-    """
-    Side-effect function.
-    The main dynamic magnet sync logic. Called every frame after homography mapping.
+    flask_sync_worker.submit(detected_mag_centres)
 
-    v3 latency optimisation:
-      - New marker: POST /magnet_add, then store its last Flask-sent position.
-      - Existing marker: only POST /magnet_update_position if movement exceeds
-        POSITION_EPSILON.
-      - Static/jittering marker: do not POST; hold Flask at last_sent_pos.
-      - Missing marker: increment missing_frames and POST /magnet_remove after
-        MISSING_FRAME_THRESHOLD frames.
-
-    detected_mag_centres maps marker_id -> (sim_x, sim_y) for all visible magnet
-    markers this frame.
-    """
-    currently_detected_ids = set(detected_mag_centres.keys())
-
-    # --- Handle detected markers ---
-    for marker_id, current_pos in detected_mag_centres.items():
-        sim_x, sim_y = current_pos
-
-        if marker_id not in tracked_magnets:
-            # v3 lifecycle: dictionary membership means "registered on Flask".
-            # New marker — add it once, then record the position Flask accepted.
-            ok = flask_magnet_add(marker_id, sim_x, sim_y)
-            if ok:
-                tracked_magnets[marker_id] = MagnetTrackState(
-                    last_sent_pos=(sim_x, sim_y),
-                    missing_frames=0,
-                )
-                print(f"Registered magnet marker_{marker_id}")
-            continue
-
-        state = tracked_magnets[marker_id]
-
-        # Marker is visible again, so reset its disappearance debounce counter
-        # regardless of whether we send a position update this frame.
-        state.missing_frames = 0
-
-        if _position_changed_enough(current_pos, state.last_sent_pos):
-            # v3 latency optimisation: only send a blocking HTTP update when the
-            # movement is meaningful relative to the last Flask-synchronised pos.
-            ok = flask_magnet_update(marker_id, sim_x, sim_y)
-            if ok:
-                state.last_sent_pos = (sim_x, sim_y)
-                print(
-                    f"Updated marker_{marker_id}: "
-                    f"({sim_x:.3f}, {sim_y:.3f})"
-                )
-        else:
-            # Movement is within the deadband. This avoids redundant POSTs from
-            # ArUco jitter and keeps Flask at the last valid synced position.
-            print(
-                f"marker_{marker_id} movement below epsilon; "
-                f"holding ({state.last_sent_pos[0]:.3f}, {state.last_sent_pos[1]:.3f})"
-            )
-
-    # --- Handle absent markers ---
-    # Iterate over a snapshot because successful removal deletes from tracked_magnets.
-    for marker_id in list(tracked_magnets.keys()):
-        if marker_id in currently_detected_ids:
-            # Detected this frame, already handled above.
-            continue
-
-        state = tracked_magnets[marker_id]
-        state.missing_frames += 1
-
-        if state.missing_frames > MISSING_FRAME_THRESHOLD:
-            # Absent for too long — remove from Flask and drop local state.
-            ok = flask_magnet_remove(marker_id)
-            if ok:
-                tracked_magnets.pop(marker_id, None)
-                print(
-                    f"Removed magnet marker_{marker_id} after "
-                    f"{MISSING_FRAME_THRESHOLD} missing frames"
-                )
-        else:
-            # Within threshold — hold the last Flask-sent position. No POST.
-            print(
-                f"marker_{marker_id} missing for {state.missing_frames} frame(s), "
-                "holding position"
-            )
 
 def cleanup_all_registered_magnets() -> None:
-    """
-    Side-effect function.
-    Removes all magnets registered during this session from Flask on exit.
-
-    v3 lifecycle refactor: tracked_magnets is now the single source of truth for
-    which markers are registered with Flask, so cleanup only iterates this dict.
-    """
-    for marker_id in list(tracked_magnets.keys()):
-        flask_magnet_remove(marker_id)
-        tracked_magnets.pop(marker_id, None)
-    print("All registered magnets removed from Flask.")
+    flask_sync_worker.stop_and_cleanup()
+    flask_sync_worker.print_stats()
 
 
 # Computer vision: detection and geometry
@@ -481,7 +511,7 @@ def process_frame(
         "extract_board_and_tokens": 0.0,
         "compute_homography": 0.0,
         "transform_tokens": 0.0,
-        "sync_flask": 0.0,
+        "network_submit": 0.0,
         "annotate_and_warp": 0.0,
     }
 
@@ -495,7 +525,10 @@ def process_frame(
 
     # If no markers, still sync with empty detection set and return
     if not corners or marker_ids is None:
+        t0 = perf_counter()
         sync_magnets_to_flask({})
+        t1 = perf_counter()
+        stage_times["network_submit"] = t1 - t0
         return frame, stage_times
 
     # Stage 2: find centres
@@ -532,7 +565,7 @@ def process_frame(
     t0 = perf_counter()
     sync_magnets_to_flask(detected_mag_centres_sim)
     t1 = perf_counter()
-    stage_times["sync_flask"] = t1 - t0
+    stage_times["network_submit"] = t1 - t0
 
     # Stage 7: annotation + warped debug view
     t0 = perf_counter()
@@ -560,14 +593,20 @@ def stream_webcam_with_aruco(
     if not cap.isOpened():
         raise RuntimeError(f"Could not open camera with index {camera_index}.")
 
+    flask_sync_worker.start()
+
     prev_time = -1
     fps = 0
     i = 0
     averageFPS = 0
     try:
         while True:
+            t_cap0 = perf_counter()
             ret, frame = cap.read()
+            t_cap1 = perf_counter()
+            cap_read_time = t_cap1 - t_cap0
             if not ret:
+                record_latency("cap_read", cap_read_time)
                 print("Failed to grab frame from camera; exiting.", file=sys.stderr)
                 break
             now = perf_counter()
@@ -586,29 +625,33 @@ def stream_webcam_with_aruco(
             # Aggregate per-stage latencies
             global frame_count
             frame_count += 1
+            record_latency("cap_read", cap_read_time)
             for name, val in stage_times.items():
-                cumulative_latencies[name] = cumulative_latencies.get(name, 0.0) + float(val)
-            cumulative_latencies["process_frame_call"] += proc_time
+                record_latency(name, val)
+            record_latency("process_frame_call", proc_time)
 
             # Time annotate_fps
             t_a0 = perf_counter()
             annotate_fps(frame, fps)
             t_a1 = perf_counter()
-            cumulative_latencies["annotate_fps_call"] += (t_a1 - t_a0)
+            record_latency("annotate_fps_call", t_a1 - t_a0)
 
             # Time imshow for the main frame
             t_i0 = perf_counter()
             cv2.imshow(window_name_1, frame)
             t_i1 = perf_counter()
-            cumulative_latencies["imshow_frame"] += (t_i1 - t_i0)
+            record_latency("imshow_frame", t_i1 - t_i0)
 
             # Time imshow for the warped view
             t_i0 = perf_counter()
             cv2.imshow(window_name_2, warped_frame)
             t_i1 = perf_counter()
-            cumulative_latencies["imshow_warped"] += (t_i1 - t_i0)
+            record_latency("imshow_warped", t_i1 - t_i0)
 
+            t_w0 = perf_counter()
             key = cv2.waitKey(1) & 0xFF
+            t_w1 = perf_counter()
+            record_latency("wait_key", t_w1 - t_w0)
             if key in (ord("q"), 27):
                 break
 
@@ -619,9 +662,12 @@ def stream_webcam_with_aruco(
 
         # Output average per-stage latencies
         if frame_count > 0:
-            print("Average per-stage latencies (seconds):")
+            print("Per-stage latencies (seconds):")
             for name, total in cumulative_latencies.items():
-                print(f"  {name}: {total / frame_count:.6f}")
+                print(
+                    f"  {name}: avg {total / frame_count:.6f}, "
+                    f"max {max_latencies.get(name, 0.0):.6f}"
+                )
         else:
             print("No frames processed; no latency data available.")
 

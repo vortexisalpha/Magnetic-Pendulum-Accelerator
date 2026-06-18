@@ -79,6 +79,7 @@ public class MagnetRenderer : MonoBehaviour
         float requestStartTime = Time.realtimeSinceStartup;
         using (var req = UnityWebRequest.Get(flaskURL + "info"))
         {
+            req.timeout = 1;
             yield return req.SendWebRequest();
             if (req.result != UnityWebRequest.Result.Success) yield break;
 
