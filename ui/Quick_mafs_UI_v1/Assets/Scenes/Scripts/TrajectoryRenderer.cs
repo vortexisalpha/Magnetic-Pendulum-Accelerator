@@ -64,12 +64,22 @@ public class TrajectoryRenderer : MonoBehaviour
 
         if (PynqConnection.Instance != null)
             PynqConnection.Instance.TrajectoryReceived += OnTrajectoryReceived;
+
+        PynqParamController.ViewportChanged += OnViewportChanged;
     }
 
     void OnDestroy()
     {
         if (PynqConnection.Instance != null)
             PynqConnection.Instance.TrajectoryReceived -= OnTrajectoryReceived;
+
+        PynqParamController.ViewportChanged -= OnViewportChanged;
+    }
+
+    private void OnViewportChanged()
+    {
+        storedPoints = null;
+        SetVisible(false);
     }
 
     void OnDisable()

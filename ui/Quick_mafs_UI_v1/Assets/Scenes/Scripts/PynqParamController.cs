@@ -25,6 +25,7 @@ public class PynqParamController : MonoBehaviour
 
     public static event Action<bool, int, int, bool> HighResGateChanged;
     public static event Action<ControlData> ParametersChanged;
+    public static event Action ViewportChanged;
     public static bool IsHighResGateActive { get; private set; }
     public static bool IsHighResRenderPending { get; private set; }
     public static int PendingResX { get; private set; }
@@ -38,6 +39,7 @@ public class PynqParamController : MonoBehaviour
     [SerializeField] GameObject pendulumHeightController;
     [SerializeField] GameObject resXController;
     [SerializeField] GameObject resYController;
+    [SerializeField] GameObject resolutionDropdownController;
     [SerializeField] GameObject panZoomController;
 
     private SliderTextDisplay dampingSlider;
@@ -46,6 +48,7 @@ public class PynqParamController : MonoBehaviour
     private SliderTextDisplay heightSlider;
     private ResolutionSlider resXSlider;
     private ResolutionSlider resYSlider;
+    private ResolutionDropdown resolutionDropdown;
     private PanZoom panZoom;
 
     private ControlData data = new ControlData();
@@ -133,6 +136,10 @@ public class PynqParamController : MonoBehaviour
             resXSlider = FindResolutionSlider(resXController) ?? FindResolutionByLabel("Res X");
         if (resYController != null)
             resYSlider = FindResolutionSlider(resYController) ?? FindResolutionByLabel("Res Y");
+
+        if (resolutionDropdownController != null && resolutionDropdown == null)
+            resolutionDropdown = resolutionDropdownController.GetComponent<ResolutionDropdown>()
+                ?? resolutionDropdownController.GetComponentInChildren<ResolutionDropdown>(true);
 
         if (panZoomController != null && panZoom == null)
             panZoom = panZoomController.GetComponent<PanZoom>();
@@ -265,6 +272,7 @@ public class PynqParamController : MonoBehaviour
 
     public static void NotifyViewportChanged()
     {
+        ViewportChanged?.Invoke();
         if (instance == null || PynqConnection.Instance == null) return;
         if (!instance.slidersResolved) instance.ResolveSliders();
         instance.SendPreviewWhileDragging();
@@ -305,6 +313,12 @@ public class PynqParamController : MonoBehaviour
         if (heightSlider != null) data.pendulumHeight = heightSlider.GetCurrentValue();
         if (resXSlider != null && resXSlider.Resolution > 0) data.resX = resXSlider.Resolution;
         if (resYSlider != null && resYSlider.Resolution > 0) data.resY = resYSlider.Resolution;
+
+        if (resolutionDropdown != null && resolutionDropdown.ResolutionX > 0)
+        {
+            data.resX = resolutionDropdown.ResolutionX;
+            data.resY = resolutionDropdown.ResolutionY;
+        }
     }
 
     private void SnapshotAndPublishSliders()
