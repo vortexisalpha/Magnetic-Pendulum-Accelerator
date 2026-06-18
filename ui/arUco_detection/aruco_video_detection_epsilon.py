@@ -317,10 +317,12 @@ def detect_aruco_markers(
     Converts frame to greyscale, downsizes, detects ArUco markers and scales up the corner pixel coordinates.
     """
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    small = cv2.resize(gray, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    gray = clahe.apply(gray)
+    small = cv2.resize(gray, None, fx=1, fy=1, interpolation=cv2.INTER_AREA)
     corners, marker_ids, _ = detector.detectMarkers(small)
     for corner in corners:
-        corner *= 4
+        corner *= 1
     return corners, marker_ids
 
 
@@ -587,6 +589,25 @@ def stream_webcam_with_aruco(
 ) -> None:
     dictionary = cv2.aruco.getPredefinedDictionary(ARUCO_DICT_NAME)
     params = cv2.aruco.DetectorParameters()
+
+    params.adaptiveThreshWinSizeMin = 3
+    params.adaptiveThreshWinSizeMax = 53
+    params.adaptiveThreshWinSizeStep = 8
+    params.adaptiveThreshConstant = 7
+
+    params.minMarkerPerimeterRate = 0.015
+    params.maxMarkerPerimeterRate = 4.0
+    params.polygonalApproxAccuracyRate = 0.04
+
+    params.minDistanceToBorder = 2
+
+    #params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+    #params.cornerRefinementWinSize = 5
+    #params.cornerRefinementMaxIterations = 30
+    #params.cornerRefinementMinAccuracy = 0.01
+
+    #params.perspectiveRemovePixelPerCell = 6
+
     detector = cv2.aruco.ArucoDetector(dictionary, params)
 
     cap = cv2.VideoCapture(camera_index)
