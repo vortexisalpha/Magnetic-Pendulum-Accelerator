@@ -47,13 +47,13 @@ MAGNET_IDS = {4, 5, 6}
 # Number of consecutive frames a previously registered marker must be absent
 # before it is removed from Flask. Prevents spurious removal due to detection
 # noise or brief occlusion.
-MISSING_FRAME_THRESHOLD = 5
+MISSING_FRAME_THRESHOLD = 8
 
 # v3 latency optimisation: only send /magnet_update_position if the measured
 # marker position has moved by more than this amount in simulation coordinates.
 # The board range is roughly [-1.8, 1.8], so 0.02 is a small deadband. Tune this
 # based on your observed ArUco jitter and acceptable responsiveness.
-POSITION_EPSILON = 0.04
+POSITION_EPSILON = 0.08
 POSITION_EPSILON_SQ = POSITION_EPSILON * POSITION_EPSILON
 
 
