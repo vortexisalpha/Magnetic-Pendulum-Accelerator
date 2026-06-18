@@ -26,6 +26,7 @@ public class PynqParamController : MonoBehaviour
     public static event Action<bool, int, int, bool> HighResGateChanged;
     public static event Action<ControlData> ParametersChanged;
     public static event Action ViewportChanged;
+    public static event Action RenderInvalidated;
     public static bool IsHighResGateActive { get; private set; }
     public static bool IsHighResRenderPending { get; private set; }
     public static int PendingResX { get; private set; }
@@ -236,6 +237,7 @@ public class PynqParamController : MonoBehaviour
 
     public static void NotifySliderReleased()
     {
+        RenderInvalidated?.Invoke();
         if (instance == null) return;
         if (!instance.slidersResolved) instance.ResolveSliders();
         SliderToImageTimer.OnSliderChanged();
@@ -249,6 +251,7 @@ public class PynqParamController : MonoBehaviour
 
     public static void NotifySliderChanged()
     {
+        RenderInvalidated?.Invoke();
         if (instance == null) return;
         if (!instance.slidersResolved) instance.ResolveSliders();
         if (PynqConnection.Instance == null)
@@ -273,6 +276,7 @@ public class PynqParamController : MonoBehaviour
     public static void NotifyViewportChanged()
     {
         ViewportChanged?.Invoke();
+        RenderInvalidated?.Invoke();
         if (instance == null || PynqConnection.Instance == null) return;
         if (!instance.slidersResolved) instance.ResolveSliders();
         instance.SendPreviewWhileDragging();
